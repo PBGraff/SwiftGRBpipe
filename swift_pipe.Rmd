@@ -7,13 +7,14 @@ output:
     keep_md: yes
     toc: yes
 ---
+opts_chunk$set(cache=TRUE,warning=FALSE)
 
 # Introduction
 
 The Swift satellite's detection pipeline uses over 500 triggering criteria to detect long gamma-ray bursts. Modeling of the GRB and this pipeline is extremely computationally expensive, so here we aim to replace the original model with an approximation trained via machine learning.
 
 # Loading Libraries
-```{r,cache=TRUE,warning=FALSE,load_library}
+```{r,load_library}
 library(lattice)
 library(ggplot2)
 library(caret)
@@ -31,7 +32,7 @@ source("ROCfunctions.R")
 
 # Loading the Data
 Let's begin our analysis with the newest set of prior samples. The column `trigger_index` indicates if a GRB was detected (1) or not (0).
-```{r,cache=TRUE,load_data}
+```{r,load_data}
 data <- read.table("data/test_sample_prior2.txt",header=TRUE)
 names(data)
 dim(data)
@@ -40,7 +41,7 @@ data$trigger_index <- as.factor(data$trigger_index)
 
 ## Split into Train/Test
 We split the data into training/test sets with a 60/40 split. The `filename` column is omitted as this contains no information. We also remove parameters that were saved from the method used to produce the data samples and the names of the backgrounds and burst shapes used for each sample.
-```{r,cache=TRUE,split_data}
+```{r,split_data}
 split <- createDataPartition(data$trigger_index,p=0.6,list=FALSE)
 colRemove <- c(1,grep("global|type|background|burst",names(data)))
 training <- data[split,-colRemove]
@@ -50,13 +51,13 @@ testing <- data[-split,-colRemove]
 ## Exploratory Plots
 Our first plot shows the distribution of log-Luminosity (`log_L`) vs redshift (`z`) for both triggered and missed GRBs.
 
-```{r,cache=TRUE,expl_plot_1}
+```{r,expl_plot_1}
 qplot(training$log_L,training$z,color=training$trigger_index,xlab="log(Luminosity)",ylab="redshift",main="Scatterplot of Luminosity and Redshift for GRBs")
 ```
 
 We also look at the distribution of redshifts of detected GRBs.
 
-```{r,cache=TRUE,expl_plot_2}
+```{r,expl_plot_2}
 qplot(training$z[training$trigger_index==1],xlab="redshift",ylab="frequency",main="Histogram of Redshift for Detected GRBs")
 ```
 
@@ -65,13 +66,13 @@ We now train multiple machine learning methods on the problem. Each is then eval
 
 ## Random Forests
 Random forests uses an ensemble of decision trees. The default of 500 trees per forest is kept.
-```{r,cache=TRUE,rf_train}
+```{r,rf_train}
 modRF <- train(trigger_index ~ ., data = training, method = "rf", tuneGrid = expand.grid(mtry = seq(3,13,by=2)), trControl = trainControl(method = "cv", number = 10))
 modRF
 ```
 
 This is now evaluated on the test data set.
-```{r,cache=TRUE,rf_eval}
+```{r,rf_eval}
 predRF1 <- predict(modRF$finalModel, testing, type="response")
 predRF2 <- predict(modRF$finalModel, testing, type="prob")
 confMatRF <- confusionMatrix(predRF1, testing$trigger_index)
@@ -79,7 +80,7 @@ confMatRF
 ```
 
 We plot a ROC to see performance varying over threshold value.
-```{r,cache=TRUE,warning=FALSE,rf_roc}
+```{r,rf_roc}
 rocRF <- calculateROC(testing$trigger_index, predRF2[,2], d = 0.001)
 plotROC(rocRF, title = "Random Forests ROC")
 ```
@@ -88,13 +89,13 @@ The optimal threshold is at a probability of `r rocRF$pthresh[which.max(rocRF$F1
 
 ## AdaBoost
 AdaBoost performs boosting of decision trees, where an ensemble of trees is used. Each time a tree is trained, samples predicted correctly are down-weighted and samples predicted incorrectly are up-weighted. We tune over the number of trees, the tree depth, and learning rate.
-```{r,cache=TRUE,ada_train}
+```{r,ada_train}
 modAda <- train(trigger_index ~ ., data = training, method = "ada", tuneLength = 3)
 modAda
 ```
 
 This is now evaluated on the test data set.
-```{r,cache=TRUE,ada_eval}
+```{r,ada_eval}
 predAda1 <- predict(modAda$finalModel, testing, type="response")
 predAda2 <- predict(modAda$finalModel, testing, type="prob")
 confMatAda <- confusionMatrix(predAda1, testing$trigger_index)
@@ -102,7 +103,7 @@ confMatAda
 ```
 
 We plot a ROC to see performance varying over threshold value.
-```{r,cache=TRUE,warning=FALSE,ada_roc}
+```{r,ada_roc}
 rocAda <- calculateROC(testing$trigger_index, predAda2[,2], d = 0.001)
 plotROC(rocAda, title = "AdaBoost ROC")
 ```
@@ -111,26 +112,25 @@ The optimal threshold is at a probability of `r rocAda$pthresh[which.max(rocAda$
 
 ## Support Vector Machines
 Support vector machines...
-```{r,cache=TRUE,svm_train}
+```{r,svm_train}
 modSVM <- train(trigger_index ~ ., data = training, method = "svmRadial", tuneLength = 3)
 modSVM
 ```
 
 This is now evaluated on the test data set.
-```{r,cache=TRUE,svm_eval}
-predSVM1 <- predict(modSVM$finalModel, testing, type="response")
-predSVM2 <- predict(modSVM$finalModel, testing, type="prob")
-confMatSVM <- confusionMatrix(predSVM1, testing$trigger_index)
-confMatSVM
+```{r,svm_eval}
+#predSVM1 <- predict(modSVM$finalModel, testing, type="response")
+#predSVM2 <- predict(modSVM$finalModel, testing, type="prob")
+#confMatSVM <- confusionMatrix(predSVM1, testing$trigger_index)
+#confMatSVM
 ```
 
 We plot a ROC to see performance varying over threshold value.
-```{r,cache=TRUE,warning=FALSE,svm_roc}
-rocSVM <- calculateROC(testing$trigger_index, predSVM2[,2], d = 0.001)
-plotROC(rocSVM, title = "Support Vector Machines ROC")
+```{r,svm_roc}
+#rocSVM <- calculateROC(testing$trigger_index, predSVM2[,2], d = 0.001)
+#plotROC(rocSVM, title = "Support Vector Machines ROC")
 ```
 
-The optimal threshold is at a probability of `r rocSVM$pthresh[which.max(rocSVM$F1score)]` and achieves an accuracy of `r rocSVM$Accuracy[which.max(rocSVM$F1score)]*100`%.
 
 ## Linear/Quadratic Discriminant Analysis
 
