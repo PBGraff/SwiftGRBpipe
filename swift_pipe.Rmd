@@ -7,7 +7,10 @@ output:
     keep_md: yes
     toc: yes
 ---
-opts_chunk$set(cache=TRUE,warning=FALSE)
+```{r,echo=FALSE,set_opts}
+library(knitr)
+opts_chunk$set(cache=TRUE,warning=FALSE,cache.path="cache/",fig.path="figure/")
+```
 
 # Introduction
 
@@ -90,13 +93,13 @@ The optimal threshold is at a probability of `r rocRF$pthresh[which.max(rocRF$F1
 ## AdaBoost
 AdaBoost performs boosting of decision trees, where an ensemble of trees is used. Each time a tree is trained, samples predicted correctly are down-weighted and samples predicted incorrectly are up-weighted. We tune over the number of trees, the tree depth, and learning rate.
 ```{r,ada_train}
-modAda <- train(trigger_index ~ ., data = training, method = "ada", tuneLength = 3)
+modAda <- train(trigger_index ~ ., data = training, method = "ada", tuneGrid = expand.grid(nu=0.1, iter=50, maxdepth=3), trControl = trainControl(method = "cv"))
 modAda
 ```
 
 This is now evaluated on the test data set.
 ```{r,ada_eval}
-predAda1 <- predict(modAda$finalModel, testing, type="response")
+predAda1 <- predict(modAda$finalModel, testing, type="vector")
 predAda2 <- predict(modAda$finalModel, testing, type="prob")
 confMatAda <- confusionMatrix(predAda1, testing$trigger_index)
 confMatAda
@@ -113,7 +116,7 @@ The optimal threshold is at a probability of `r rocAda$pthresh[which.max(rocAda$
 ## Support Vector Machines
 Support vector machines...
 ```{r,svm_train}
-modSVM <- train(trigger_index ~ ., data = training, method = "svmRadial", tuneLength = 3)
+modSVM <- train(trigger_index ~ ., data = training, method = "svmRadial", tuneLength = 3, preProc = c("center", "scale"), trControl = trainControl(method = "cv", classProbs = TRUE))
 modSVM
 ```
 
