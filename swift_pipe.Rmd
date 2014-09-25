@@ -1,7 +1,7 @@
 ---
 title: "Swift GRB Pipeline Modeling"
 author: "Philip Graff"
-date: "September 23, 2014"
+#date: "September 23, 2014"
 output:
   html_document:
     keep_md: yes
@@ -17,7 +17,7 @@ opts_chunk$set(cache=TRUE,warning=FALSE,cache.path="cache/",fig.path="figure/")
 The Swift satellite's detection pipeline uses over 500 triggering criteria to detect long gamma-ray bursts. Modeling of the GRB and this pipeline is extremely computationally expensive, so here we aim to replace the original model with an approximation trained via machine learning.
 
 # Loading Libraries
-```{r,load_library}
+```{r,results='hide',load_library}
 library(lattice)
 library(ggplot2)
 library(caret)
@@ -29,39 +29,48 @@ library(e1071)
 library(klaR)
 library(gbm)
 library(ada)
-library(pROC)
+library(caTools)
 source("ROCfunctions.R")
+source("utils.R")
 ```
 
-# Loading the Data
-Let's begin our analysis with the newest set of prior samples. The column `trigger_index` indicates if a GRB was detected (1) or not (0).
+# Loading and Preparing the Data
+Let's begin our analysis with the newest set of prior samples. The column `trigger_index` indicates if a GRB was detected (1) or not (0). We also add the `(r,phi)` variables from converting the `grid_id` to physical parameters. Lastly, we take the logarithm of certain columns that give intensities.
 ```{r,load_data}
 data <- read.table("data/test_sample_prior2.txt",header=TRUE)
 names(data)
 dim(data)
 data$trigger_index <- as.factor(data$trigger_index)
+data[,c("radius","phi")]<-t(sapply(data$grid_id,gridToXY))
+logCols <- grep("flux|bgd",names(data))
+data[,logCols] <- log10(data[,logCols])
 ```
 
-## Split into Train/Test
-We split the data into training/test sets with a 60/40 split. The `filename` column is omitted as this contains no information. We also remove parameters that were saved from the method used to produce the data samples and the names of the backgrounds and burst shapes used for each sample.
+## Split into Train/Test and Tidying
+We split the data into training/test sets with a 60/40 split. The `filename` column is omitted as this contains no information and the `grid_id` column that is replaced with `radius` and `phi`. We also remove parameters that were saved from the method used to produce the data samples and the names of the backgrounds and burst shapes used for each sample.
 ```{r,split_data}
+set.seed(7632)
 split <- createDataPartition(data$trigger_index,p=0.6,list=FALSE)
-colRemove <- c(1,grep("global|type|background|burst",names(data)))
+colRemove <- c(1,grep("global|type|background|burst|grid",names(data)))
 training <- data[split,-colRemove]
 testing <- data[-split,-colRemove]
 ```
 
 ## Exploratory Plots
-Our first plot shows the distribution of log-Luminosity (`log_L`) vs redshift (`z`) for both triggered and missed GRBs.
+Our first plot shows the pair-wise distributions of log-Luminosity (`log_L`), redshift (`z`), peak enrgy (`E_peak`), and log-flux (`flux`) for both triggered and missed GRBs. Triggered ones are in pink and missed ones are in blue.
 
 ```{r,expl_plot_1}
-qplot(training$log_L,training$z,color=training$trigger_index,xlab="log(Luminosity)",ylab="redshift",main="Scatterplot of Luminosity and Redshift for GRBs")
+featurePlot(training[,c("log_L","z","E_peak","flux")],training$trigger_index,plot="pairs",sub="blue = not detected, pink = detected",main="Pairs Scatterplot of Variable Correlations in Training Data",pch=19,cex=0.4,alpha=0.3)
+```
+
+```{r,expl_plot_2}
+qplot(training$flux,color=training$trigger_index,binwidth=1,xlab="log10(Flux)",ylab="Frequency",main="Histogram of Flux") + theme_bw()
 ```
 
 We also look at the distribution of redshifts of detected GRBs.
 
-```{r,expl_plot_2}
-qplot(training$z[training$trigger_index==1],xlab="redshift",ylab="frequency",main="Histogram of Redshift for Detected GRBs")
+```{r,expl_plot_3}
+qplot(training$z[training$trigger_index==1],binwidth=0.2,xlab="redshift",ylab="frequency",main="Histogram of Redshift for Detected GRBs") + theme_bw()
 ```
 
 # Machine Learning Analysis
@@ -71,7 +80,6 @@ We now train multiple machine learning methods on the problem. Each is then eval
 Random forests uses an ensemble of decision trees. The default of 500 trees per forest is kept.
 ```{r,rf_train}
 modRF <- train(trigger_index ~ ., data = training, method = "rf", tuneGrid = expand.grid(mtry = seq(3,13,by=2)), trControl = trainControl(method = "cv", number = 10))
-modRF
 ```
 
 This is now evaluated on the test data set.
@@ -90,11 +98,16 @@ plotROC(rocRF, title = "Random Forests ROC")
 
 The optimal threshold is at a probability of `r rocRF$pthresh[which.max(rocRF$F1score)]` and achieves an accuracy of `r rocRF$Accuracy[which.max(rocRF$F1score)]*100`%.
 
+To analyze further, we consider the relative variable importances.
+```{r,rf_varimp}
+varImp(modRF$finalModel)
+```
+We clearly see that the `flux` is most important. `E_peak` and `log_L` take a distant second and third place ranking.
+
 ## AdaBoost
 AdaBoost performs boosting of decision trees, where an ensemble of trees is used. Each time a tree is trained, samples predicted correctly are down-weighted and samples predicted incorrectly are up-weighted. We tune over the number of trees, the tree depth, and learning rate.
 ```{r,ada_train}
-modAda <- train(trigger_index ~ ., data = training, method = "ada", tuneGrid = expand.grid(nu=0.1, iter=50, maxdepth=3), trControl = trainControl(method = "cv"))
-modAda
+modAda <- train(trigger_index ~ ., data = training, method = "ada", tuneGrid = expand.grid(nu=0.1, iter=seq(50,200,by=50), maxdepth=seq(1,4)), trControl = trainControl(method = "cv"))
 ```
 
 This is now evaluated on the test data set.
@@ -116,8 +129,8 @@ The optimal threshold is at a probability of `r rocAda$pthresh[which.max(rocAda$
 ## Support Vector Machines
 Support vector machines...
 ```{r,svm_train}
-modSVM <- train(trigger_index ~ ., data = training, method = "svmRadial", tuneLength = 3, preProc = c("center", "scale"), trControl = trainControl(method = "cv", classProbs = TRUE))
-modSVM
+#modSVM <- train(trigger_index ~ ., data = training, method = "svmRadial", tuneLength = 3, preProc = c("center", "scale"), trControl = trainControl(method = "cv", classProbs = TRUE))
+#modSVM
 ```
 
 This is now evaluated on the test data set.
@@ -134,7 +147,99 @@ We plot a ROC to see performance varying over threshold value.
 #plotROC(rocSVM, title = "Support Vector Machines ROC")
 ```
 
-
 ## Linear/Quadratic Discriminant Analysis
+Linear and quadratic discriminant analysis form linear or quadratic decision boundaries in the input feature space. These are determined by fitting multivariate Guassians to each class. Linear discriminant analysis requires that they all use the same covariance matrix, while quadratic discriminant analysis allows the covariances to vary.
+```{r,lqda_train}
+modLDA <- train(trigger_index ~ ., data = training, method = "lda", preProc = c("center", "scale"), trControl = trainControl(method = "cv"))
+modQDA <- train(trigger_index ~ ., data = training, method = "qda", preProc = c("center", "scale"), trControl = trainControl(method = "cv"))
+```
+
+This is now evaluated on the test data set.
+```{r,lqda_eval}
+predLDA <- predict(modLDA, testing)
+predQDA <- predict(modQDA, testing)
+confMatLDA <- confusionMatrix(predLDA, testing$trigger_index)
+confMatLDA
+confMatQDA <- confusionMatrix(predQDA, testing$trigger_index)
+confMatQDA
+```
+
+LDA has a final accuracy of `r confMatLDA$overall[1]*100`%. QDA has a final accuracy of `r confMatQDA$overall[1]*100`%.
+
+## Boosted Logistic Regression
+Performs boosting combined with logistic regression.
+```{r,logit_train}
+modLogit <- train(trigger_index ~ ., data = training, method = "LogitBoost", preProc = c("center", "scale"), trControl = trainControl(method = "cv"), tuneLength = 5)
+```
+
+This is now evaluated on the test data set.
+```{r,logit_eval}
+predLogit <- predict(modLogit, testing)
+confMatLogit <- confusionMatrix(predLogit, testing$trigger_index)
+confMatLogit
+```
+
+Boosted logistic regression has a final accuracy of `r confMatLogit$overall[1]*100`%.
 
 ## Model Stacking
+We may be able to improve upon any one model by performing model stacking. Here, we build a data frame with the predictions of the already trained models and then fit a model based on those predicted values.
+```{r,model_stack_setup}
+stackTrain <- data.frame(rf = predict(modRF$finalModel,training,type="prob")[,2],
+                         ada = predict(modRF$finalModel,training,type="prob")[,2],
+                         lda = as.numeric(predict(modLDA,training)),
+                         qda = as.numeric(predict(modQDA,training)),
+                         logit = as.numeric(predict(modLogit,training)),
+                         trigger_index = training$trigger_index)
+stackTest <- data.frame(rf = predict(modRF$finalModel,testing,type="prob")[,2],
+                        ada = predict(modRF$finalModel,testing,type="prob")[,2],
+                        lda = as.numeric(predict(modLDA,testing)),
+                        qda = as.numeric(predict(modQDA,testing)),
+                        logit = as.numeric(predict(modLogit,testing)),
+                        trigger_index = testing$trigger_index)
+```
+
+Now we fit a model.
+```{r,stack_fit}
+modStackTree <- train(trigger_index ~ ., data = stackTrain, method = "rf")
+```
+
+```{r,stack_eval}
+predStackTree <- predict(modStackTree$finalModel,stackTest)
+confMatStackTree <- confusionMatrix(predStackTree,stackTest$trigger_index)
+confMatStackTree
+```
+
+Our stacked model has an accuracy of `r confMatStackTree$overall[1]*100`%.
+
+## SkyNet
+We perform training with *SkyNet* seperately as this is done outside of R. However, we can print the 10-fold cross-validation training files for use by SkyNet and then load in and analyze the resulting predictions. These files will need some reformatting before using with SkyNet. The train/test sets will be used for training and the blind sets will be used for CV comparison between NN architectures.
+```{r,print_SN_files}
+set.seed(29035)
+newTrain <- cbind(training[,-14],trigger_index=as.integer(training$trigger_index)-1)
+nnFolds <- createFolds(training$trigger_index,k=10,returnTrain=TRUE)
+for (i in seq(0,9)) {
+        inTrain <- createDataPartition(newTrain[nnFolds[[i+1]],]$trigger_index,p=0.75,list=FALSE)
+        write.table(x=newTrain[nnFolds[[i+1]][inTrain],],file=paste0("data/SNformat/priorsample2_CV",as.character(i),"_train.txt"),sep=",",row.names=FALSE,col.names=FALSE)
+        write.table(x=newTrain[nnFolds[[i+1]][-inTrain],],file=paste0("data/SNformat/priorsample2_CV",as.character(i),"_test.txt"),sep=",",row.names=FALSE,col.names=FALSE)
+        write.table(x=newTrain[-nnFolds[[i+1]],],file=paste0("data/SNformat/priorsample2_CV",as.character(i),"_blind.txt"),sep=",",row.names=FALSE,col.names=FALSE)
+}
+```
+
+```{r,read_SN_pred}
+# Nothing here yet.
+```
+
+# Analysis of Predictions
+We now take the random forests model, as it - along with AdaBoost - performed the best on the test data, and analyze the distributions of those that were predicted incorrectly.
+
+```{r,found_missed}
+featurePlot(testing[testing$trigger_index!=predRF1,c("log_L","z","E_peak","flux")],testing$trigger_index[testing$trigger_index!=predRF1],plot="pairs",sub="blue = False Pos, pink = False Neg",main="Found/Missed Pairs Scatterplot of Incorrect Predictions",pch=19,cex=0.6,alpha=0.5)
+```
+
+# Predicting on Independent Samples from Specific Distributions
+
+
+
+# Conclusions
+
+
