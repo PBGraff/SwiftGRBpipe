@@ -411,16 +411,18 @@ confMatStackTree</code></pre>
 </div>
 <div id="skynet" class="section level2">
 <h2>SkyNet</h2>
-<p>We perform training with <em>SkyNet</em> seperately as this is done outside of R. However, we can print the 10-fold cross-validation training files for use by SkyNet and then load in and analyze the resulting predictions. These files will need some reformatting before using with SkyNet. The train/test sets will be used for training and the blind sets will be used for CV comparison between NN architectures.</p>
+<p>We perform training with <em>SkyNet</em> seperately as this is done outside of R. However, we can print the 10-fold cross-validation training files for use by SkyNet and then load in and analyze the resulting predictions. These files will need some reformatting before using with SkyNet. The train/test sets will be used for training and the blind sets will be used for CV comparison between NN architectures. The eval set is used for evaluating the final chosen model as done for all others already analyzed here.</p>
 <pre class="r"><code>set.seed(29035)
 newTrain &lt;- cbind(training[,-14],trigger_index=as.integer(training$trigger_index)-1)
+newTest &lt;- cbind(testing[,-14],trigger_index=as.integer(testing$trigger_index)-1)
 nnFolds &lt;- createFolds(training$trigger_index,k=10,returnTrain=TRUE)
 for (i in seq(0,9)) {
         inTrain &lt;- createDataPartition(newTrain[nnFolds[[i+1]],]$trigger_index,p=0.75,list=FALSE)
         write.table(x=newTrain[nnFolds[[i+1]][inTrain],],file=paste0(&quot;data/SNformat/priorsample2_CV&quot;,as.character(i),&quot;_train.txt&quot;),sep=&quot;,&quot;,row.names=FALSE,col.names=FALSE)
         write.table(x=newTrain[nnFolds[[i+1]][-inTrain],],file=paste0(&quot;data/SNformat/priorsample2_CV&quot;,as.character(i),&quot;_test.txt&quot;),sep=&quot;,&quot;,row.names=FALSE,col.names=FALSE)
         write.table(x=newTrain[-nnFolds[[i+1]],],file=paste0(&quot;data/SNformat/priorsample2_CV&quot;,as.character(i),&quot;_blind.txt&quot;),sep=&quot;,&quot;,row.names=FALSE,col.names=FALSE)
-}</code></pre>
+}
+write.table(x=newTest,file=&quot;data/SNformat/priorsample2_eval.txt&quot;)</code></pre>
 <pre class="r"><code># Nothing here yet.</code></pre>
 </div>
 </div>
