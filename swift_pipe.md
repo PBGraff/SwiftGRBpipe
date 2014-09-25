@@ -13,12 +13,53 @@ library(lattice)
 library(ggplot2)
 library(caret)
 library(rattle)
+```
+
+```
+## Rattle: A free graphical interface for data mining with R.
+## Version 3.3.0 Copyright (c) 2006-2014 Togaware Pty Ltd.
+## Type 'rattle()' to shake, rattle, and roll your data.
+```
+
+```r
 library(rpart)
 library(plyr)
 library(randomForest)
+```
+
+```
+## randomForest 4.6-10
+## Type rfNews() to see new features/changes/bug fixes.
+```
+
+```r
 library(e1071)
 library(klaR)
+```
+
+```
+## Loading required package: MASS
+```
+
+```r
 library(gbm)
+```
+
+```
+## Loading required package: survival
+## Loading required package: splines
+## 
+## Attaching package: 'survival'
+## 
+## The following object is masked from 'package:caret':
+## 
+##     cluster
+## 
+## Loading required package: parallel
+## Loaded gbm 2.1
+```
+
+```r
 library(ada)
 library(caTools)
 source("ROCfunctions.R")
@@ -26,7 +67,7 @@ source("utils.R")
 ```
 
 # Loading and Preparing the Data
-Let's begin our analysis with the newest set of prior samples. The column `trigger_index` indicates if a GRB was detected (1) or not (0). We also add the `(r,phi)` variables from converting the `grid_id` to physical parameters. Lastly, we take the logarithm of certain columns that give intensities.
+Let's begin our analysis with the newest set of prior samples. The column `trigger_index` indicates if a GRB was detected (1) or not (0). We also add the `(r,phi)` variables from converting the `grid_id` to physical parameters. We take the logarithm of certain columns that give intensities. Lastly, we randomly permute the data sample.
 
 ```r
 data <- read.table("data/test_sample_prior2.txt",header=TRUE)
@@ -58,6 +99,8 @@ data$trigger_index <- as.factor(data$trigger_index)
 data[,c("radius","phi")]<-t(sapply(data$grid_id,gridToXY))
 logCols <- grep("flux|bgd",names(data))
 data[,logCols] <- log10(data[,logCols])
+ranPerm <- sample(seq(1,length(data$trigger_index)),size=length(data$trigger_index))
+data <- data[ranPerm,]
 ```
 
 ## Split into Train/Test and Tidying
@@ -121,25 +164,25 @@ confMatRF
 ## 
 ##           Reference
 ## Prediction    0    1
-##          0 2867   14
-##          1   18 1100
+##          0 2874   37
+##          1   11 1077
 ##                                         
-##                Accuracy : 0.992         
-##                  95% CI : (0.989, 0.995)
+##                Accuracy : 0.988         
+##                  95% CI : (0.984, 0.991)
 ##     No Information Rate : 0.721         
-##     P-Value [Acc > NIR] : <2e-16        
+##     P-Value [Acc > NIR] : < 2e-16       
 ##                                         
-##                   Kappa : 0.98          
-##  Mcnemar's Test P-Value : 0.596         
+##                   Kappa : 0.97          
+##  Mcnemar's Test P-Value : 0.000308      
 ##                                         
-##             Sensitivity : 0.994         
-##             Specificity : 0.987         
-##          Pos Pred Value : 0.995         
-##          Neg Pred Value : 0.984         
+##             Sensitivity : 0.996         
+##             Specificity : 0.967         
+##          Pos Pred Value : 0.987         
+##          Neg Pred Value : 0.990         
 ##              Prevalence : 0.721         
-##          Detection Rate : 0.717         
-##    Detection Prevalence : 0.720         
-##       Balanced Accuracy : 0.991         
+##          Detection Rate : 0.719         
+##    Detection Prevalence : 0.728         
+##       Balanced Accuracy : 0.981         
 ##                                         
 ##        'Positive' Class : 0             
 ## 
@@ -154,7 +197,7 @@ plotROC(rocRF, title = "Random Forests ROC")
 
 ![plot of chunk rf_roc](figure/rf_roc.png) 
 
-The optimal threshold is at a probability of 0.476 and achieves an accuracy of 99.2248%.
+The optimal threshold is at a probability of 0.421 and achieves an accuracy of 98.9997%.
 
 To analyze further, we consider the relative variable importances.
 
@@ -164,21 +207,21 @@ varImp(modRF$finalModel)
 
 ```
 ##                Overall
-## log_L          427.312
-## z                5.538
-## bin_size_emit    5.633
-## alpha           15.229
-## beta             7.548
-## E_peak         144.857
-## bgd_15.25keV     3.235
-## bgd_15.50keV     2.612
-## bgd25.100keV     2.846
-## bgd50.350keV     2.731
-## theta           19.452
-## flux          1756.319
-## ndet             4.034
-## radius          13.058
-## phi              4.817
+## log_L          455.329
+## z                6.158
+## bin_size_emit    6.555
+## alpha            7.359
+## beta            11.002
+## E_peak         154.730
+## bgd_15.25keV     2.434
+## bgd_15.50keV     2.226
+## bgd25.100keV     2.382
+## bgd50.350keV     2.691
+## theta           18.025
+## flux          1727.221
+## ndet             6.028
+## radius          11.505
+## phi              1.625
 ```
 We clearly see that the `flux` is most important. `E_peak` and `log_L` take a distant second and third place ranking.
 
@@ -186,7 +229,7 @@ We clearly see that the `flux` is most important. `E_peak` and `log_L` take a di
 AdaBoost performs boosting of decision trees, where an ensemble of trees is used. Each time a tree is trained, samples predicted correctly are down-weighted and samples predicted incorrectly are up-weighted. We tune over the number of trees, the tree depth, and learning rate.
 
 ```r
-modAda <- train(trigger_index ~ ., data = training, method = "ada", tuneGrid = expand.grid(nu=0.1, iter=seq(50,200,by=50), maxdepth=seq(1,4)), trControl = trainControl(method = "cv"))
+modAda <- train(trigger_index ~ ., data = training, method = "ada", tuneGrid = expand.grid(nu=0.1, iter=seq(50,150,by=50), maxdepth=seq(2,4)), trControl = trainControl(method = "cv"))
 ```
 
 This is now evaluated on the test data set.
@@ -203,25 +246,25 @@ confMatAda
 ## 
 ##           Reference
 ## Prediction    0    1
-##          0 2864   11
-##          1   21 1103
+##          0 2872   27
+##          1   13 1087
 ##                                         
-##                Accuracy : 0.992         
-##                  95% CI : (0.989, 0.995)
+##                Accuracy : 0.99          
+##                  95% CI : (0.986, 0.993)
 ##     No Information Rate : 0.721         
 ##     P-Value [Acc > NIR] : <2e-16        
 ##                                         
-##                   Kappa : 0.98          
-##  Mcnemar's Test P-Value : 0.112         
+##                   Kappa : 0.975         
+##  Mcnemar's Test P-Value : 0.0398        
 ##                                         
-##             Sensitivity : 0.993         
-##             Specificity : 0.990         
-##          Pos Pred Value : 0.996         
-##          Neg Pred Value : 0.981         
+##             Sensitivity : 0.995         
+##             Specificity : 0.976         
+##          Pos Pred Value : 0.991         
+##          Neg Pred Value : 0.988         
 ##              Prevalence : 0.721         
-##          Detection Rate : 0.716         
-##    Detection Prevalence : 0.719         
-##       Balanced Accuracy : 0.991         
+##          Detection Rate : 0.718         
+##    Detection Prevalence : 0.725         
+##       Balanced Accuracy : 0.986         
 ##                                         
 ##        'Positive' Class : 0             
 ## 
@@ -236,7 +279,7 @@ plotROC(rocAda, title = "AdaBoost ROC")
 
 ![plot of chunk ada_roc](figure/ada_roc.png) 
 
-The optimal threshold is at a probability of 0.483 and achieves an accuracy of 99.1998%.
+The optimal threshold is at a probability of 0.508 and achieves an accuracy of 99.0248%.
 
 ## Support Vector Machines
 Support vector machines...
@@ -284,25 +327,25 @@ confMatLDA
 ## 
 ##           Reference
 ## Prediction    0    1
-##          0 2810   81
-##          1   75 1033
+##          0 2823  103
+##          1   62 1011
 ##                                         
-##                Accuracy : 0.961         
-##                  95% CI : (0.955, 0.967)
+##                Accuracy : 0.959         
+##                  95% CI : (0.952, 0.965)
 ##     No Information Rate : 0.721         
-##     P-Value [Acc > NIR] : <2e-16        
+##     P-Value [Acc > NIR] : < 2e-16       
 ##                                         
-##                   Kappa : 0.903         
-##  Mcnemar's Test P-Value : 0.689         
+##                   Kappa : 0.896         
+##  Mcnemar's Test P-Value : 0.00185       
 ##                                         
-##             Sensitivity : 0.974         
-##             Specificity : 0.927         
-##          Pos Pred Value : 0.972         
-##          Neg Pred Value : 0.932         
+##             Sensitivity : 0.979         
+##             Specificity : 0.908         
+##          Pos Pred Value : 0.965         
+##          Neg Pred Value : 0.942         
 ##              Prevalence : 0.721         
-##          Detection Rate : 0.703         
-##    Detection Prevalence : 0.723         
-##       Balanced Accuracy : 0.951         
+##          Detection Rate : 0.706         
+##    Detection Prevalence : 0.732         
+##       Balanced Accuracy : 0.943         
 ##                                         
 ##        'Positive' Class : 0             
 ## 
@@ -318,31 +361,31 @@ confMatQDA
 ## 
 ##           Reference
 ## Prediction    0    1
-##          0 2823  135
-##          1   62  979
+##          0 2809  155
+##          1   76  959
 ##                                         
-##                Accuracy : 0.951         
-##                  95% CI : (0.944, 0.957)
+##                Accuracy : 0.942         
+##                  95% CI : (0.935, 0.949)
 ##     No Information Rate : 0.721         
 ##     P-Value [Acc > NIR] : < 2e-16       
 ##                                         
-##                   Kappa : 0.875         
-##  Mcnemar's Test P-Value : 2.9e-07       
+##                   Kappa : 0.853         
+##  Mcnemar's Test P-Value : 2.87e-07      
 ##                                         
-##             Sensitivity : 0.979         
-##             Specificity : 0.879         
-##          Pos Pred Value : 0.954         
-##          Neg Pred Value : 0.940         
+##             Sensitivity : 0.974         
+##             Specificity : 0.861         
+##          Pos Pred Value : 0.948         
+##          Neg Pred Value : 0.927         
 ##              Prevalence : 0.721         
-##          Detection Rate : 0.706         
-##    Detection Prevalence : 0.740         
-##       Balanced Accuracy : 0.929         
+##          Detection Rate : 0.702         
+##    Detection Prevalence : 0.741         
+##       Balanced Accuracy : 0.917         
 ##                                         
 ##        'Positive' Class : 0             
 ## 
 ```
 
-LDA has a final accuracy of 96.099%. QDA has a final accuracy of 95.0738%.
+LDA has a final accuracy of 95.874%. QDA has a final accuracy of 94.2236%.
 
 ## Boosted Logistic Regression
 Performs boosting combined with logistic regression.
@@ -364,31 +407,31 @@ confMatLogit
 ## 
 ##           Reference
 ## Prediction    0    1
-##          0 2854   22
-##          1   31 1092
-##                                        
-##                Accuracy : 0.987        
-##                  95% CI : (0.983, 0.99)
-##     No Information Rate : 0.721        
-##     P-Value [Acc > NIR] : <2e-16       
-##                                        
-##                   Kappa : 0.967        
-##  Mcnemar's Test P-Value : 0.272        
-##                                        
-##             Sensitivity : 0.989        
-##             Specificity : 0.980        
-##          Pos Pred Value : 0.992        
-##          Neg Pred Value : 0.972        
-##              Prevalence : 0.721        
-##          Detection Rate : 0.714        
-##    Detection Prevalence : 0.719        
-##       Balanced Accuracy : 0.985        
-##                                        
-##        'Positive' Class : 0            
+##          0 2863   37
+##          1   22 1077
+##                                         
+##                Accuracy : 0.985         
+##                  95% CI : (0.981, 0.989)
+##     No Information Rate : 0.721         
+##     P-Value [Acc > NIR] : <2e-16        
+##                                         
+##                   Kappa : 0.963         
+##  Mcnemar's Test P-Value : 0.0684        
+##                                         
+##             Sensitivity : 0.992         
+##             Specificity : 0.967         
+##          Pos Pred Value : 0.987         
+##          Neg Pred Value : 0.980         
+##              Prevalence : 0.721         
+##          Detection Rate : 0.716         
+##    Detection Prevalence : 0.725         
+##       Balanced Accuracy : 0.980         
+##                                         
+##        'Positive' Class : 0             
 ## 
 ```
 
-Boosted logistic regression has a final accuracy of 98.6747%.
+Boosted logistic regression has a final accuracy of 98.5246%.
 
 ## Model Stacking
 We may be able to improve upon any one model by performing model stacking. Here, we build a data frame with the predictions of the already trained models and then fit a model based on those predicted values.
@@ -426,31 +469,31 @@ confMatStackTree
 ## 
 ##           Reference
 ## Prediction    0    1
-##          0 2867   14
-##          1   18 1100
+##          0 2875   40
+##          1   10 1074
 ##                                         
-##                Accuracy : 0.992         
-##                  95% CI : (0.989, 0.995)
+##                Accuracy : 0.987         
+##                  95% CI : (0.984, 0.991)
 ##     No Information Rate : 0.721         
-##     P-Value [Acc > NIR] : <2e-16        
+##     P-Value [Acc > NIR] : < 2e-16       
 ##                                         
-##                   Kappa : 0.98          
-##  Mcnemar's Test P-Value : 0.596         
+##                   Kappa : 0.969         
+##  Mcnemar's Test P-Value : 4.11e-05      
 ##                                         
-##             Sensitivity : 0.994         
-##             Specificity : 0.987         
-##          Pos Pred Value : 0.995         
-##          Neg Pred Value : 0.984         
+##             Sensitivity : 0.997         
+##             Specificity : 0.964         
+##          Pos Pred Value : 0.986         
+##          Neg Pred Value : 0.991         
 ##              Prevalence : 0.721         
-##          Detection Rate : 0.717         
-##    Detection Prevalence : 0.720         
-##       Balanced Accuracy : 0.991         
+##          Detection Rate : 0.719         
+##    Detection Prevalence : 0.729         
+##       Balanced Accuracy : 0.980         
 ##                                         
 ##        'Positive' Class : 0             
 ## 
 ```
 
-Our stacked model has an accuracy of 99.1998%. This is no better than our best models, so we take it that the stacking is currently unable to improve upon the performance.
+Our stacked model has an accuracy of 98.7497%. This is no better than our best models, so we take it that the stacking is currently unable to improve upon the performance.
 
 ## SkyNet
 We perform training with *SkyNet* seperately as this is done outside of R. However, we can print the 10-fold cross-validation training files for use by SkyNet and then load in and analyze the resulting predictions. These files will need some reformatting before using with SkyNet. The train/test sets will be used for training and the blind sets will be used for CV comparison between NN architectures. The eval set is used for evaluating the final chosen model as done for all others already analyzed here.
@@ -466,7 +509,7 @@ for (i in seq(0,9)) {
         write.table(x=newTrain[nnFolds[[i+1]][-inTrain],],file=paste0("data/SNformat/priorsample2_CV",as.character(i),"_test.txt"),sep=",",row.names=FALSE,col.names=FALSE)
         write.table(x=newTrain[-nnFolds[[i+1]],],file=paste0("data/SNformat/priorsample2_CV",as.character(i),"_blind.txt"),sep=",",row.names=FALSE,col.names=FALSE)
 }
-write.table(x=newTest,file="data/SNformat/priorsample2_eval.txt")
+write.table(x=newTest,file="data/SNformat/priorsample2_eval.txt",sep=",",row.names=FALSE,col.names=FALSE)
 ```
 
 

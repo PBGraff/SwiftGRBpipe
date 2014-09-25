@@ -17,7 +17,7 @@ opts_chunk$set(cache=TRUE,warning=FALSE,cache.path="cache/",fig.path="figure/")
 The Swift satellite's detection pipeline uses over 500 triggering criteria to detect long gamma-ray bursts. Modeling of the GRB and this pipeline is extremely computationally expensive, so here we aim to replace the original model with an approximation trained via machine learning.
 
 # Loading Libraries
-```{r,results='hide',load_library}
+```{r,results='hide',cache=FALSE,load_library}
 library(lattice)
 library(ggplot2)
 library(caret)
@@ -35,7 +35,7 @@ source("utils.R")
 ```
 
 # Loading and Preparing the Data
-Let's begin our analysis with the newest set of prior samples. The column `trigger_index` indicates if a GRB was detected (1) or not (0). We also add the `(r,phi)` variables from converting the `grid_id` to physical parameters. Lastly, we take the logarithm of certain columns that give intensities.
+Let's begin our analysis with the newest set of prior samples. The column `trigger_index` indicates if a GRB was detected (1) or not (0). We also add the `(r,phi)` variables from converting the `grid_id` to physical parameters. We take the logarithm of certain columns that give intensities. Lastly, we randomly permute the data sample.
 ```{r,load_data}
 data <- read.table("data/test_sample_prior2.txt",header=TRUE)
 names(data)
@@ -44,6 +44,8 @@ data$trigger_index <- as.factor(data$trigger_index)
 data[,c("radius","phi")]<-t(sapply(data$grid_id,gridToXY))
 logCols <- grep("flux|bgd",names(data))
 data[,logCols] <- log10(data[,logCols])
+ranPerm <- sample(seq(1,length(data$trigger_index)),size=length(data$trigger_index))
+data <- data[ranPerm,]
 ```
 
 ## Split into Train/Test and Tidying
@@ -107,7 +109,7 @@ We clearly see that the `flux` is most important. `E_peak` and `log_L` take a di
 ## AdaBoost
 AdaBoost performs boosting of decision trees, where an ensemble of trees is used. Each time a tree is trained, samples predicted correctly are down-weighted and samples predicted incorrectly are up-weighted. We tune over the number of trees, the tree depth, and learning rate.
 ```{r,ada_train}
-modAda <- train(trigger_index ~ ., data = training, method = "ada", tuneGrid = expand.grid(nu=0.1, iter=seq(50,200,by=50), maxdepth=seq(1,4)), trControl = trainControl(method = "cv"))
+modAda <- train(trigger_index ~ ., data = training, method = "ada", tuneGrid = expand.grid(nu=0.1, iter=seq(50,150,by=50), maxdepth=seq(2,4)), trControl = trainControl(method = "cv"))
 ```
 
 This is now evaluated on the test data set.
@@ -213,7 +215,7 @@ Our stacked model has an accuracy of `r confMatStackTree$overall[1]*100`%. This 
 
 ## SkyNet
 We perform training with *SkyNet* seperately as this is done outside of R. However, we can print the 10-fold cross-validation training files for use by SkyNet and then load in and analyze the resulting predictions. These files will need some reformatting before using with SkyNet. The train/test sets will be used for training and the blind sets will be used for CV comparison between NN architectures. The eval set is used for evaluating the final chosen model as done for all others already analyzed here.
-```{r,print_SN_files}
+```{r,cache=FALSE,print_SN_files}
 set.seed(29035)
 newTrain <- cbind(training[,-14],trigger_index=as.integer(training$trigger_index)-1)
 newTest <- cbind(testing[,-14],trigger_index=as.integer(testing$trigger_index)-1)
@@ -224,7 +226,7 @@ for (i in seq(0,9)) {
         write.table(x=newTrain[nnFolds[[i+1]][-inTrain],],file=paste0("data/SNformat/priorsample2_CV",as.character(i),"_test.txt"),sep=",",row.names=FALSE,col.names=FALSE)
         write.table(x=newTrain[-nnFolds[[i+1]],],file=paste0("data/SNformat/priorsample2_CV",as.character(i),"_blind.txt"),sep=",",row.names=FALSE,col.names=FALSE)
 }
-write.table(x=newTest,file="data/SNformat/priorsample2_eval.txt")
+write.table(x=newTest,file="data/SNformat/priorsample2_eval.txt",sep=",",row.names=FALSE,col.names=FALSE)
 ```
 
 ```{r,read_SN_pred}
