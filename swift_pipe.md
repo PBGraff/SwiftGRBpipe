@@ -450,7 +450,7 @@ confMatStackTree
 ## 
 ```
 
-Our stacked model has an accuracy of 99.1998%.
+Our stacked model has an accuracy of 99.1998%. This is no better than our best models, so we take it that the stacking is currently unable to improve upon the performance.
 
 ## SkyNet
 We perform training with *SkyNet* seperately as this is done outside of R. However, we can print the 10-fold cross-validation training files for use by SkyNet and then load in and analyze the resulting predictions. These files will need some reformatting before using with SkyNet. The train/test sets will be used for training and the blind sets will be used for CV comparison between NN architectures.
