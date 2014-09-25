@@ -212,10 +212,11 @@ confMatStackTree
 Our stacked model has an accuracy of `r confMatStackTree$overall[1]*100`%. This is no better than our best models, so we take it that the stacking is currently unable to improve upon the performance.
 
 ## SkyNet
-We perform training with *SkyNet* seperately as this is done outside of R. However, we can print the 10-fold cross-validation training files for use by SkyNet and then load in and analyze the resulting predictions. These files will need some reformatting before using with SkyNet. The train/test sets will be used for training and the blind sets will be used for CV comparison between NN architectures.
+We perform training with *SkyNet* seperately as this is done outside of R. However, we can print the 10-fold cross-validation training files for use by SkyNet and then load in and analyze the resulting predictions. These files will need some reformatting before using with SkyNet. The train/test sets will be used for training and the blind sets will be used for CV comparison between NN architectures. The eval set is used for evaluating the final chosen model as done for all others already analyzed here.
 ```{r,print_SN_files}
 set.seed(29035)
 newTrain <- cbind(training[,-14],trigger_index=as.integer(training$trigger_index)-1)
+newTest <- cbind(testing[,-14],trigger_index=as.integer(testing$trigger_index)-1)
 nnFolds <- createFolds(training$trigger_index,k=10,returnTrain=TRUE)
 for (i in seq(0,9)) {
         inTrain <- createDataPartition(newTrain[nnFolds[[i+1]],]$trigger_index,p=0.75,list=FALSE)
@@ -223,6 +224,7 @@ for (i in seq(0,9)) {
         write.table(x=newTrain[nnFolds[[i+1]][-inTrain],],file=paste0("data/SNformat/priorsample2_CV",as.character(i),"_test.txt"),sep=",",row.names=FALSE,col.names=FALSE)
         write.table(x=newTrain[-nnFolds[[i+1]],],file=paste0("data/SNformat/priorsample2_CV",as.character(i),"_blind.txt"),sep=",",row.names=FALSE,col.names=FALSE)
 }
+write.table(x=newTest,file="data/SNformat/priorsample2_eval.txt")
 ```
 
 ```{r,read_SN_pred}
