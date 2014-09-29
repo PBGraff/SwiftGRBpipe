@@ -17,7 +17,7 @@ opts_chunk$set(cache=TRUE,warning=FALSE,cache.path="cache/",fig.path="figure/")
 The Swift satellite's detection pipeline uses over 500 triggering criteria to detect long gamma-ray bursts. Modeling of the GRB and this pipeline is extremely computationally expensive, so here we aim to replace the original model with an approximation trained via machine learning.
 
 # Loading Libraries
-```{r,results='hide',cache=FALSE,load_library}
+```{r,results='hide',load_library}
 library(lattice)
 library(ggplot2)
 library(caret)
@@ -30,6 +30,7 @@ library(klaR)
 library(gbm)
 library(ada)
 library(caTools)
+library(kernlab)
 source("ROCfunctions.R")
 source("utils.R")
 ```
@@ -131,23 +132,18 @@ The optimal threshold is at a probability of `r rocAda$pthresh[which.max(rocAda$
 ## Support Vector Machines
 Support vector machines...
 ```{r,svm_train}
-#modSVM <- train(trigger_index ~ ., data = training, method = "svmRadial", tuneLength = 3, preProc = c("center", "scale"), trControl = trainControl(method = "cv", classProbs = TRUE))
-#modSVM
+modSVM <- train(trigger_index ~ ., data = training, method = "svmRadial", tuneGrid = expand.grid(C = c(0.05,0.1,0.2,0.5), sigma = c(0.0005,0.001,0.002,0.005,0.01,0.02)), preProc = c("center", "scale"), trControl = trainControl(method = "cv", classProbs = TRUE))
+modSVM
 ```
 
 This is now evaluated on the test data set.
 ```{r,svm_eval}
-#predSVM1 <- predict(modSVM$finalModel, testing, type="response")
-#predSVM2 <- predict(modSVM$finalModel, testing, type="prob")
-#confMatSVM <- confusionMatrix(predSVM1, testing$trigger_index)
-#confMatSVM
+predSVM <- predict(modSVM, testing, type="raw")
+confMatSVM <- confusionMatrix(predSVM, testing$trigger_index)
+confMatSVM
 ```
 
-We plot a ROC to see performance varying over threshold value.
-```{r,svm_roc}
-#rocSVM <- calculateROC(testing$trigger_index, predSVM2[,2], d = 0.001)
-#plotROC(rocSVM, title = "Support Vector Machines ROC")
-```
+The support vector machines method has a final accuracy of `r confMatSVM$overall[1]*100`%.
 
 ## Linear/Quadratic Discriminant Analysis
 Linear and quadratic discriminant analysis form linear or quadratic decision boundaries in the input feature space. These are determined by fitting multivariate Guassians to each class. Linear discriminant analysis requires that they all use the same covariance matrix, while quadratic discriminant analysis allows the covariances to vary.
@@ -183,6 +179,21 @@ confMatLogit
 
 Boosted logistic regression has a final accuracy of `r confMatLogit$overall[1]*100`%.
 
+## Naive Bayes
+The Naive Bayes method assumes that all parameters are independent.
+```{r,nb_train}
+modNB <- train(trigger_index ~ ., data = training, method = "nb", preProc = c("center", "scale"), trControl = trainControl(method = "cv"), tuneLength = 5)
+```
+
+This is now evaluated on the test data set.
+```{r,nb_eval}
+predNB <- predict(modNB, testing)
+confMatNB <- confusionMatrix(predNB, testing$trigger_index)
+confMatNB
+```
+
+Naive Bayes has a final accuracy of `r confMatNB$overall[1]*100`%.
+
 ## Model Stacking
 We may be able to improve upon any one model by performing model stacking. Here, we build a data frame with the predictions of the already trained models and then fit a model based on those predicted values.
 ```{r,model_stack_setup}
@@ -215,7 +226,7 @@ Our stacked model has an accuracy of `r confMatStackTree$overall[1]*100`%. This 
 
 ## SkyNet
 We perform training with *SkyNet* seperately as this is done outside of R. However, we can print the 10-fold cross-validation training files for use by SkyNet and then load in and analyze the resulting predictions. These files will need some reformatting before using with SkyNet. The train/test sets will be used for training and the blind sets will be used for CV comparison between NN architectures. The eval set is used for evaluating the final chosen model as done for all others already analyzed here.
-```{r,cache=FALSE,print_SN_files}
+```{r,print_SN_files}
 set.seed(29035)
 newTrain <- cbind(training[,-14],trigger_index=as.integer(training$trigger_index)-1)
 newTest <- cbind(testing[,-14],trigger_index=as.integer(testing$trigger_index)-1)
@@ -230,7 +241,26 @@ write.table(x=newTest,file="data/SNformat/priorsample2_eval.txt",sep=",",row.nam
 ```
 
 ```{r,read_SN_pred}
-# Nothing here yet.
+nets <- list(c("25","10"),c("25","30"),c("50","10"),c("50","30"),c("100","10"),c("100","30"),c("25-25","110"),c("25-25","330"),c("50-50","110"),c("50-50","330"),c("100-30","110"),c("100-30","330"),c("100-50","110"),c("100-50","330"),c("100-100","110"),c("100-100","330"))
+results <- c()
+for (i in seq(1,length(nets))) {
+        nnpred <- read.table(paste0("NNpreds/priorsample2_CVall_nhid-",nets[[i]][1],"_act",nets[[i]][2],"_blind_pred.txt"))
+        acc <- sum((nnpred[,17]==0 & nnpred[,19]<0.5) | (nnpred[,17]==1 & nnpred[,19]>=0.5))/length(nnpred[,17])
+        for (j in seq(0,9)) {
+                nnpred <- read.table(paste0("NNpreds/priorsample2_CV",as.character(j),"_nhid-",nets[[i]][1],"_act",nets[[i]][2],"_eval_pred.txt"))
+                if (j==0) {
+                        truevals <- nnpred[,17]
+                        predvals <- nnpred[,19]/10
+                } else {
+                        predvals <- predvals + nnpred[,19]/10
+                }
+        }
+        eval <- sum((truevals==0 & predvals<0.5) | (truevals==1 & predvals>=0.5))/length(truevals)
+        results <- rbind(results,cbind(nets[[i]][1],nets[[i]][2],acc,eval))
+}
+colnames(results) <- c("Layers","Activation","Test.Accuracy","Evaluation.Accuracy")
+results <- data.frame(results)
+results
 ```
 
 # Analysis of Predictions
@@ -241,8 +271,48 @@ featurePlot(testing[testing$trigger_index!=predRF1,c("log_L","z","E_peak","flux"
 ```
 
 # Predicting on Independent Samples from Specific Distributions
+In a first test of the predictors, we load in some data from a specific source GRB distribution. Five sets with different seeds and different numbers of active detectors are used.
+```{r,gen_test_data}
+files <- c("summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_noevo_ndet27147.txt","summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed11_noevo_ndet26997.txt","summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed12_noevo_ndet29413.txt","summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed50_noevo_ndet24387.txt","summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed60_noevo_ndet26478.txt")
+realdata <- c()
+for (i in seq(1,5)) {
+        temp <- read.table(paste0("data/",files[i]),header=TRUE)
+        temp$trigger_index <- as.factor(temp$trigger_index)
+        temp[,c("radius","phi")]<-t(sapply(temp$grid_id,gridToXY))
+        logCols <- grep("flux|bgd",names(temp))
+        temp[,logCols] <- log10(temp[,logCols])
+        colRemove <- c(1,grep("global|type|background|burst|grid",names(temp)))
+        temp <- temp[,-colRemove]
+        realdata <- rbind(realdata,temp)
+}
+```
 
+We now evaluate our trained predictors on this data set and consider their accuracy.
+```{r,eval_test_data}
+realTestRF <- confusionMatrix(predict(modRF$finalModel,realdata),realdata$trigger_index)
+realTestAda <- confusionMatrix(predict(modAda$finalModel,realdata),realdata$trigger_index)
+realTestSVM <- confusionMatrix(predict(modSVM,realdata),realdata$trigger_index)
+realTestLDA <- confusionMatrix(predict(modLDA,realdata),realdata$trigger_index)
+realTestQDA <- confusionMatrix(predict(modQDA,realdata),realdata$trigger_index)
+realTestLogit <- confusionMatrix(predict(modLogit,realdata),realdata$trigger_index)
+realTestNB <- confusionMatrix(predict(modNB,realdata),realdata$trigger_index)
+```
 
+Here we summarize the accuracies:
+
+ - Random forests:  `r realTestRF$overall[1]*100`%
+ 
+ - AdaBoost:  `r realTestAda$overall[1]*100`%
+ 
+ - Support vector machines:  `r realTestSVM$overall[1]*100`%
+ 
+ - Linear disc. analysis:  `r realTestLDA$overall[1]*100`%
+ 
+ - Quadratic disc. analysis:  `r realTestQDA$overall[1]*100`%
+ 
+ - Boosted logistic regression:  `r realTestLogit$overall[1]*100`%
+ 
+ - Naive Bayes:  `r realTestNB$overall[1]*100`%
 
 # Conclusions
 

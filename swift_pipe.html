@@ -70,6 +70,7 @@ if (window.hljs && document.readyState && document.readyState === "complete") {
 <li><a href="#support-vector-machines">Support Vector Machines</a></li>
 <li><a href="#linearquadratic-discriminant-analysis">Linear/Quadratic Discriminant Analysis</a></li>
 <li><a href="#boosted-logistic-regression">Boosted Logistic Regression</a></li>
+<li><a href="#naive-bayes">Naive Bayes</a></li>
 <li><a href="#model-stacking">Model Stacking</a></li>
 <li><a href="#skynet">SkyNet</a></li>
 </ul></li>
@@ -88,32 +89,16 @@ if (window.hljs && document.readyState && document.readyState === "complete") {
 <pre class="r"><code>library(lattice)
 library(ggplot2)
 library(caret)
-library(rattle)</code></pre>
-<pre><code>## Rattle: A free graphical interface for data mining with R.
-## Version 3.3.0 Copyright (c) 2006-2014 Togaware Pty Ltd.
-## Type 'rattle()' to shake, rattle, and roll your data.</code></pre>
-<pre class="r"><code>library(rpart)
+library(rattle)
+library(rpart)
 library(plyr)
-library(randomForest)</code></pre>
-<pre><code>## randomForest 4.6-10
-## Type rfNews() to see new features/changes/bug fixes.</code></pre>
-<pre class="r"><code>library(e1071)
-library(klaR)</code></pre>
-<pre><code>## Loading required package: MASS</code></pre>
-<pre class="r"><code>library(gbm)</code></pre>
-<pre><code>## Loading required package: survival
-## Loading required package: splines
-## 
-## Attaching package: 'survival'
-## 
-## The following object is masked from 'package:caret':
-## 
-##     cluster
-## 
-## Loading required package: parallel
-## Loaded gbm 2.1</code></pre>
-<pre class="r"><code>library(ada)
+library(randomForest)
+library(e1071)
+library(klaR)
+library(gbm)
+library(ada)
 library(caTools)
+library(kernlab)
 source(&quot;ROCfunctions.R&quot;)
 source(&quot;utils.R&quot;)</code></pre>
 </div>
@@ -267,16 +252,80 @@ plotROC(rocAda, title = &quot;AdaBoost ROC&quot;)</code></pre>
 <div id="support-vector-machines" class="section level2">
 <h2>Support Vector Machines</h2>
 <p>Support vector machines…</p>
-<pre class="r"><code>#modSVM &lt;- train(trigger_index ~ ., data = training, method = &quot;svmRadial&quot;, tuneLength = 3, preProc = c(&quot;center&quot;, &quot;scale&quot;), trControl = trainControl(method = &quot;cv&quot;, classProbs = TRUE))
-#modSVM</code></pre>
+<pre class="r"><code>modSVM &lt;- train(trigger_index ~ ., data = training, method = &quot;svmRadial&quot;, tuneGrid = expand.grid(C = c(0.05,0.1,0.2,0.5), sigma = c(0.0005,0.001,0.002,0.005,0.01,0.02)), preProc = c(&quot;center&quot;, &quot;scale&quot;), trControl = trainControl(method = &quot;cv&quot;, classProbs = TRUE))
+modSVM</code></pre>
+<pre><code>## Support Vector Machines with Radial Basis Function Kernel 
+## 
+## 6001 samples
+##   15 predictor
+##    2 classes: '0', '1' 
+## 
+## Pre-processing: centered, scaled 
+## Resampling: Cross-Validated (10 fold) 
+## 
+## Summary of sample sizes: 5400, 5402, 5401, 5400, 5401, 5401, ... 
+## 
+## Resampling results across tuning parameters:
+## 
+##   C     sigma  Accuracy  Kappa  Accuracy SD  Kappa SD
+##   0.05  5e-04  0.9       0.8    0.011        0.02    
+##   0.05  1e-03  0.9       0.8    0.011        0.02    
+##   0.05  2e-03  0.9       0.8    0.010        0.02    
+##   0.05  5e-03  1.0       0.9    0.008        0.02    
+##   0.05  1e-02  1.0       0.9    0.010        0.02    
+##   0.05  2e-02  1.0       0.9    0.010        0.02    
+##   0.10  5e-04  0.9       0.8    0.011        0.02    
+##   0.10  1e-03  0.9       0.8    0.010        0.02    
+##   0.10  2e-03  1.0       0.9    0.006        0.01    
+##   0.10  5e-03  1.0       0.9    0.009        0.02    
+##   0.10  1e-02  1.0       0.9    0.009        0.02    
+##   0.10  2e-02  1.0       0.9    0.008        0.02    
+##   0.20  5e-04  0.9       0.8    0.011        0.02    
+##   0.20  1e-03  1.0       0.9    0.007        0.02    
+##   0.20  2e-03  1.0       0.9    0.009        0.02    
+##   0.20  5e-03  1.0       0.9    0.008        0.02    
+##   0.20  1e-02  1.0       0.9    0.008        0.02    
+##   0.20  2e-02  1.0       0.9    0.007        0.02    
+##   0.50  5e-04  1.0       0.9    0.010        0.03    
+##   0.50  1e-03  1.0       0.9    0.009        0.02    
+##   0.50  2e-03  1.0       0.9    0.009        0.02    
+##   0.50  5e-03  1.0       0.9    0.008        0.02    
+##   0.50  1e-02  1.0       0.9    0.006        0.01    
+##   0.50  2e-02  1.0       0.9    0.007        0.02    
+## 
+## Accuracy was used to select the optimal model using  the largest value.
+## The final values used for the model were sigma = 0.002 and C = 0.1.</code></pre>
 <p>This is now evaluated on the test data set.</p>
-<pre class="r"><code>#predSVM1 &lt;- predict(modSVM$finalModel, testing, type=&quot;response&quot;)
-#predSVM2 &lt;- predict(modSVM$finalModel, testing, type=&quot;prob&quot;)
-#confMatSVM &lt;- confusionMatrix(predSVM1, testing$trigger_index)
-#confMatSVM</code></pre>
-<p>We plot a ROC to see performance varying over threshold value.</p>
-<pre class="r"><code>#rocSVM &lt;- calculateROC(testing$trigger_index, predSVM2[,2], d = 0.001)
-#plotROC(rocSVM, title = &quot;Support Vector Machines ROC&quot;)</code></pre>
+<pre class="r"><code>predSVM &lt;- predict(modSVM, testing, type=&quot;raw&quot;)
+confMatSVM &lt;- confusionMatrix(predSVM, testing$trigger_index)
+confMatSVM</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    0    1
+##          0 2802   77
+##          1   83 1037
+##                                         
+##                Accuracy : 0.96          
+##                  95% CI : (0.953, 0.966)
+##     No Information Rate : 0.721         
+##     P-Value [Acc &gt; NIR] : &lt;2e-16        
+##                                         
+##                   Kappa : 0.901         
+##  Mcnemar's Test P-Value : 0.693         
+##                                         
+##             Sensitivity : 0.971         
+##             Specificity : 0.931         
+##          Pos Pred Value : 0.973         
+##          Neg Pred Value : 0.926         
+##              Prevalence : 0.721         
+##          Detection Rate : 0.701         
+##    Detection Prevalence : 0.720         
+##       Balanced Accuracy : 0.951         
+##                                         
+##        'Positive' Class : 0             
+## </code></pre>
+<p>The support vector machines method has a final accuracy of 95.999%.</p>
 </div>
 <div id="linearquadratic-discriminant-analysis" class="section level2">
 <h2>Linear/Quadratic Discriminant Analysis</h2>
@@ -380,6 +429,42 @@ confMatLogit</code></pre>
 ## </code></pre>
 <p>Boosted logistic regression has a final accuracy of 98.5246%.</p>
 </div>
+<div id="naive-bayes" class="section level2">
+<h2>Naive Bayes</h2>
+<p>The Naive Bayes method assumes that all parameters are independent.</p>
+<pre class="r"><code>modNB &lt;- train(trigger_index ~ ., data = training, method = &quot;nb&quot;, preProc = c(&quot;center&quot;, &quot;scale&quot;), trControl = trainControl(method = &quot;cv&quot;), tuneLength = 5)</code></pre>
+<p>This is now evaluated on the test data set.</p>
+<pre class="r"><code>predNB &lt;- predict(modNB, testing)
+confMatNB &lt;- confusionMatrix(predNB, testing$trigger_index)
+confMatNB</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    0    1
+##          0 2796   67
+##          1   89 1047
+##                                         
+##                Accuracy : 0.961         
+##                  95% CI : (0.955, 0.967)
+##     No Information Rate : 0.721         
+##     P-Value [Acc &gt; NIR] : &lt;2e-16        
+##                                         
+##                   Kappa : 0.904         
+##  Mcnemar's Test P-Value : 0.0927        
+##                                         
+##             Sensitivity : 0.969         
+##             Specificity : 0.940         
+##          Pos Pred Value : 0.977         
+##          Neg Pred Value : 0.922         
+##              Prevalence : 0.721         
+##          Detection Rate : 0.699         
+##    Detection Prevalence : 0.716         
+##       Balanced Accuracy : 0.955         
+##                                         
+##        'Positive' Class : 0             
+## </code></pre>
+<p>Naive Bayes has a final accuracy of 96.099%.</p>
+</div>
 <div id="model-stacking" class="section level2">
 <h2>Model Stacking</h2>
 <p>We may be able to improve upon any one model by performing model stacking. Here, we build a data frame with the predictions of the already trained models and then fit a model based on those predicted values.</p>
@@ -442,7 +527,43 @@ for (i in seq(0,9)) {
         write.table(x=newTrain[-nnFolds[[i+1]],],file=paste0(&quot;data/SNformat/priorsample2_CV&quot;,as.character(i),&quot;_blind.txt&quot;),sep=&quot;,&quot;,row.names=FALSE,col.names=FALSE)
 }
 write.table(x=newTest,file=&quot;data/SNformat/priorsample2_eval.txt&quot;,sep=&quot;,&quot;,row.names=FALSE,col.names=FALSE)</code></pre>
-<pre class="r"><code># Nothing here yet.</code></pre>
+<pre class="r"><code>nets &lt;- list(c(&quot;25&quot;,&quot;10&quot;),c(&quot;25&quot;,&quot;30&quot;),c(&quot;50&quot;,&quot;10&quot;),c(&quot;50&quot;,&quot;30&quot;),c(&quot;100&quot;,&quot;10&quot;),c(&quot;100&quot;,&quot;30&quot;),c(&quot;25-25&quot;,&quot;110&quot;),c(&quot;25-25&quot;,&quot;330&quot;),c(&quot;50-50&quot;,&quot;110&quot;),c(&quot;50-50&quot;,&quot;330&quot;),c(&quot;100-30&quot;,&quot;110&quot;),c(&quot;100-30&quot;,&quot;330&quot;),c(&quot;100-50&quot;,&quot;110&quot;),c(&quot;100-50&quot;,&quot;330&quot;),c(&quot;100-100&quot;,&quot;110&quot;),c(&quot;100-100&quot;,&quot;330&quot;))
+results &lt;- c()
+for (i in seq(1,length(nets))) {
+        nnpred &lt;- read.table(paste0(&quot;NNpreds/priorsample2_CVall_nhid-&quot;,nets[[i]][1],&quot;_act&quot;,nets[[i]][2],&quot;_blind_pred.txt&quot;))
+        acc &lt;- sum((nnpred[,17]==0 &amp; nnpred[,19]&lt;0.5) | (nnpred[,17]==1 &amp; nnpred[,19]&gt;=0.5))/length(nnpred[,17])
+        for (j in seq(0,9)) {
+                nnpred &lt;- read.table(paste0(&quot;NNpreds/priorsample2_CV&quot;,as.character(j),&quot;_nhid-&quot;,nets[[i]][1],&quot;_act&quot;,nets[[i]][2],&quot;_eval_pred.txt&quot;))
+                if (j==0) {
+                        truevals &lt;- nnpred[,17]
+                        predvals &lt;- nnpred[,19]/10
+                } else {
+                        predvals &lt;- predvals + nnpred[,19]/10
+                }
+        }
+        eval &lt;- sum((truevals==0 &amp; predvals&lt;0.5) | (truevals==1 &amp; predvals&gt;=0.5))/length(truevals)
+        results &lt;- rbind(results,cbind(nets[[i]][1],nets[[i]][2],acc,eval))
+}
+colnames(results) &lt;- c(&quot;Layers&quot;,&quot;Activation&quot;,&quot;Test.Accuracy&quot;,&quot;Evaluation.Accuracy&quot;)
+results &lt;- data.frame(results)
+results</code></pre>
+<pre><code>##     Layers Activation     Test.Accuracy Evaluation.Accuracy
+## 1       25         10 0.975170804865856    0.97249312328082
+## 2       25         30 0.977337110481586   0.971242810702676
+## 3       50         10 0.978003666055657   0.972993248312078
+## 4       50         30 0.973671054824196   0.971742935733933
+## 5      100         10 0.977337110481586   0.972243060765191
+## 6      100         30 0.974004332611231    0.97249312328082
+## 7    25-25        110 0.975337443759373   0.975493873468367
+## 8    25-25        330 0.975337443759373   0.972993248312078
+## 9    50-50        110  0.97633727712048   0.975243810952738
+## 10   50-50        330 0.975170804865856   0.972993248312078
+## 11  100-30        110  0.97633727712048   0.975493873468367
+## 12  100-30        330 0.973837693717714   0.972243060765191
+## 13  100-50        110 0.976503916013998   0.975493873468367
+## 14  100-50        330  0.97483752707882   0.971992998249562
+## 15 100-100        110 0.977503749375104   0.975493873468367
+## 16 100-100        330 0.975170804865856   0.972743185796449</code></pre>
 </div>
 </div>
 <div id="analysis-of-predictions" class="section level1">
@@ -453,6 +574,37 @@ write.table(x=newTest,file=&quot;data/SNformat/priorsample2_eval.txt&quot;,sep=&
 </div>
 <div id="predicting-on-independent-samples-from-specific-distributions" class="section level1">
 <h1>Predicting on Independent Samples from Specific Distributions</h1>
+<p>In a first test of the predictors, we load in some data from a specific source GRB distribution. Five sets with different seeds and different numbers of active detectors are used.</p>
+<pre class="r"><code>files &lt;- c(&quot;summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_noevo_ndet27147.txt&quot;,&quot;summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed11_noevo_ndet26997.txt&quot;,&quot;summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed12_noevo_ndet29413.txt&quot;,&quot;summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed50_noevo_ndet24387.txt&quot;,&quot;summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed60_noevo_ndet26478.txt&quot;)
+realdata &lt;- c()
+for (i in seq(1,5)) {
+        temp &lt;- read.table(paste0(&quot;data/&quot;,files[i]),header=TRUE)
+        temp$trigger_index &lt;- as.factor(temp$trigger_index)
+        temp[,c(&quot;radius&quot;,&quot;phi&quot;)]&lt;-t(sapply(temp$grid_id,gridToXY))
+        logCols &lt;- grep(&quot;flux|bgd&quot;,names(temp))
+        temp[,logCols] &lt;- log10(temp[,logCols])
+        colRemove &lt;- c(1,grep(&quot;global|type|background|burst|grid&quot;,names(temp)))
+        temp &lt;- temp[,-colRemove]
+        realdata &lt;- rbind(realdata,temp)
+}</code></pre>
+<p>We now evaluate our trained predictors on this data set and consider their accuracy.</p>
+<pre class="r"><code>realTestRF &lt;- confusionMatrix(predict(modRF$finalModel,realdata),realdata$trigger_index)
+realTestAda &lt;- confusionMatrix(predict(modAda$finalModel,realdata),realdata$trigger_index)
+realTestSVM &lt;- confusionMatrix(predict(modSVM,realdata),realdata$trigger_index)
+realTestLDA &lt;- confusionMatrix(predict(modLDA,realdata),realdata$trigger_index)
+realTestQDA &lt;- confusionMatrix(predict(modQDA,realdata),realdata$trigger_index)
+realTestLogit &lt;- confusionMatrix(predict(modLogit,realdata),realdata$trigger_index)
+realTestNB &lt;- confusionMatrix(predict(modNB,realdata),realdata$trigger_index)</code></pre>
+<p>Here we summarize the accuracies:</p>
+<ul>
+<li><p>Random forests: 93.5226%</p></li>
+<li><p>AdaBoost: 94.7985%</p></li>
+<li><p>Support vector machines: 86.8373%</p></li>
+<li><p>Linear disc. analysis: 86.9573%</p></li>
+<li><p>Quadratic disc. analysis: 86.0514%</p></li>
+<li><p>Boosted logistic regression: 91.6048%</p></li>
+<li><p>Naive Bayes: 86.8653%</p></li>
+</ul>
 </div>
 <div id="conclusions" class="section level1">
 <h1>Conclusions</h1>

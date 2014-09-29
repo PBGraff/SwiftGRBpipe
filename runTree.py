@@ -5,15 +5,15 @@ import numpy as np
 import os
 
 Nenc = 0
-Ntrees = 100
+Ntrees = 500
 cv=True
 
 # read in prior training data
-filename = "newdata/test_sample_prior12_combined.txt"
+filename = "data/test_sample_prior2.txt"
 xall,yall = readdata(filename,Nenc)
 
 # split data
-xtrain,xtest,ytrain,ytest = cross_validation.train_test_split(xall,yall,test_size=0.25)
+xtrain,xtest,ytrain,ytest = cross_validation.train_test_split(xall,yall,test_size=0.4)
 
 if cv:
 	# setup grid search parameters
@@ -23,7 +23,7 @@ if cv:
 
 	# setup classifiers and train and evaluate on test
 	basemod = ensemble.RandomForestClassifier(n_estimators=Ntrees)
-	clf = grid_search.GridSearchCV(basemod,grid_pars,verbose=2,cv=5,n_jobs=4)
+	clf = grid_search.GridSearchCV(basemod,grid_pars,verbose=2,cv=10,n_jobs=4)
 	clf.fit(xtrain,ytrain)
 	print '\nCross-validation best params: ',clf.best_params_
 	print 'Train score = ',clf.best_score_
@@ -66,7 +66,7 @@ for i in range(len(yp)):
 	ofp.write(repr(ytest[i])+'\t'+repr(yp[i])+'\n')
 ofp.close()
 '''
-
+'''
 # train and print example tree
 if cv:
 	RF3 = tree.DecisionTreeClassifier(min_samples_split=clf.best_params_['min_samples_split'],max_features=clf.best_params_['max_features'])
@@ -77,8 +77,9 @@ print '\nExample tree score = ',RF3.score(xtest,ytest),'\n'
 tree_out = tree.export_graphviz(RF3,out_file="tree.dot",feature_names=getNames(15+Nenc))
 tree_out.close()
 os.system('dot -Tpng tree.dot -o tree.png')
-
+'''
 # read in evaluation data and calculate scores
+'''
 newdists = ['newdata/summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_noevo_ndet27147.txt',\
 'newdata/summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed11_noevo_ndet26997.txt',\
 'newdata/summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed12_noevo_ndet29413.txt',\
@@ -94,3 +95,4 @@ for i in range(len(newdists)):
 	score = RF2.score(xval,ytrue)
 	print 'AdaBoost Score on data set ',i+1,' = ',score
 	PrintPredictions('results/Swift_testprior12_enc0_AB_data'+repr(i+1)+'_all_pred.txt',xval,ytrue,ypred,method='forest')
+'''

@@ -13,55 +13,15 @@ library(lattice)
 library(ggplot2)
 library(caret)
 library(rattle)
-```
-
-```
-## Rattle: A free graphical interface for data mining with R.
-## Version 3.3.0 Copyright (c) 2006-2014 Togaware Pty Ltd.
-## Type 'rattle()' to shake, rattle, and roll your data.
-```
-
-```r
 library(rpart)
 library(plyr)
 library(randomForest)
-```
-
-```
-## randomForest 4.6-10
-## Type rfNews() to see new features/changes/bug fixes.
-```
-
-```r
 library(e1071)
 library(klaR)
-```
-
-```
-## Loading required package: MASS
-```
-
-```r
 library(gbm)
-```
-
-```
-## Loading required package: survival
-## Loading required package: splines
-## 
-## Attaching package: 'survival'
-## 
-## The following object is masked from 'package:caret':
-## 
-##     cluster
-## 
-## Loading required package: parallel
-## Loaded gbm 2.1
-```
-
-```r
 library(ada)
 library(caTools)
+library(kernlab)
 source("ROCfunctions.R")
 source("utils.R")
 ```
@@ -285,25 +245,92 @@ The optimal threshold is at a probability of 0.508 and achieves an accuracy of 9
 Support vector machines...
 
 ```r
-#modSVM <- train(trigger_index ~ ., data = training, method = "svmRadial", tuneLength = 3, preProc = c("center", "scale"), trControl = trainControl(method = "cv", classProbs = TRUE))
-#modSVM
+modSVM <- train(trigger_index ~ ., data = training, method = "svmRadial", tuneGrid = expand.grid(C = c(0.05,0.1,0.2,0.5), sigma = c(0.0005,0.001,0.002,0.005,0.01,0.02)), preProc = c("center", "scale"), trControl = trainControl(method = "cv", classProbs = TRUE))
+modSVM
+```
+
+```
+## Support Vector Machines with Radial Basis Function Kernel 
+## 
+## 6001 samples
+##   15 predictor
+##    2 classes: '0', '1' 
+## 
+## Pre-processing: centered, scaled 
+## Resampling: Cross-Validated (10 fold) 
+## 
+## Summary of sample sizes: 5400, 5402, 5401, 5400, 5401, 5401, ... 
+## 
+## Resampling results across tuning parameters:
+## 
+##   C     sigma  Accuracy  Kappa  Accuracy SD  Kappa SD
+##   0.05  5e-04  0.9       0.8    0.011        0.02    
+##   0.05  1e-03  0.9       0.8    0.011        0.02    
+##   0.05  2e-03  0.9       0.8    0.010        0.02    
+##   0.05  5e-03  1.0       0.9    0.008        0.02    
+##   0.05  1e-02  1.0       0.9    0.010        0.02    
+##   0.05  2e-02  1.0       0.9    0.010        0.02    
+##   0.10  5e-04  0.9       0.8    0.011        0.02    
+##   0.10  1e-03  0.9       0.8    0.010        0.02    
+##   0.10  2e-03  1.0       0.9    0.006        0.01    
+##   0.10  5e-03  1.0       0.9    0.009        0.02    
+##   0.10  1e-02  1.0       0.9    0.009        0.02    
+##   0.10  2e-02  1.0       0.9    0.008        0.02    
+##   0.20  5e-04  0.9       0.8    0.011        0.02    
+##   0.20  1e-03  1.0       0.9    0.007        0.02    
+##   0.20  2e-03  1.0       0.9    0.009        0.02    
+##   0.20  5e-03  1.0       0.9    0.008        0.02    
+##   0.20  1e-02  1.0       0.9    0.008        0.02    
+##   0.20  2e-02  1.0       0.9    0.007        0.02    
+##   0.50  5e-04  1.0       0.9    0.010        0.03    
+##   0.50  1e-03  1.0       0.9    0.009        0.02    
+##   0.50  2e-03  1.0       0.9    0.009        0.02    
+##   0.50  5e-03  1.0       0.9    0.008        0.02    
+##   0.50  1e-02  1.0       0.9    0.006        0.01    
+##   0.50  2e-02  1.0       0.9    0.007        0.02    
+## 
+## Accuracy was used to select the optimal model using  the largest value.
+## The final values used for the model were sigma = 0.002 and C = 0.1.
 ```
 
 This is now evaluated on the test data set.
 
 ```r
-#predSVM1 <- predict(modSVM$finalModel, testing, type="response")
-#predSVM2 <- predict(modSVM$finalModel, testing, type="prob")
-#confMatSVM <- confusionMatrix(predSVM1, testing$trigger_index)
-#confMatSVM
+predSVM <- predict(modSVM, testing, type="raw")
+confMatSVM <- confusionMatrix(predSVM, testing$trigger_index)
+confMatSVM
 ```
 
-We plot a ROC to see performance varying over threshold value.
-
-```r
-#rocSVM <- calculateROC(testing$trigger_index, predSVM2[,2], d = 0.001)
-#plotROC(rocSVM, title = "Support Vector Machines ROC")
 ```
+## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    0    1
+##          0 2802   77
+##          1   83 1037
+##                                         
+##                Accuracy : 0.96          
+##                  95% CI : (0.953, 0.966)
+##     No Information Rate : 0.721         
+##     P-Value [Acc > NIR] : <2e-16        
+##                                         
+##                   Kappa : 0.901         
+##  Mcnemar's Test P-Value : 0.693         
+##                                         
+##             Sensitivity : 0.971         
+##             Specificity : 0.931         
+##          Pos Pred Value : 0.973         
+##          Neg Pred Value : 0.926         
+##              Prevalence : 0.721         
+##          Detection Rate : 0.701         
+##    Detection Prevalence : 0.720         
+##       Balanced Accuracy : 0.951         
+##                                         
+##        'Positive' Class : 0             
+## 
+```
+
+The support vector machines method has a final accuracy of 95.999%.
 
 ## Linear/Quadratic Discriminant Analysis
 Linear and quadratic discriminant analysis form linear or quadratic decision boundaries in the input feature space. These are determined by fitting multivariate Guassians to each class. Linear discriminant analysis requires that they all use the same covariance matrix, while quadratic discriminant analysis allows the covariances to vary.
@@ -433,6 +460,52 @@ confMatLogit
 
 Boosted logistic regression has a final accuracy of 98.5246%.
 
+## Naive Bayes
+The Naive Bayes method assumes that all parameters are independent.
+
+```r
+modNB <- train(trigger_index ~ ., data = training, method = "nb", preProc = c("center", "scale"), trControl = trainControl(method = "cv"), tuneLength = 5)
+```
+
+This is now evaluated on the test data set.
+
+```r
+predNB <- predict(modNB, testing)
+confMatNB <- confusionMatrix(predNB, testing$trigger_index)
+confMatNB
+```
+
+```
+## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    0    1
+##          0 2796   67
+##          1   89 1047
+##                                         
+##                Accuracy : 0.961         
+##                  95% CI : (0.955, 0.967)
+##     No Information Rate : 0.721         
+##     P-Value [Acc > NIR] : <2e-16        
+##                                         
+##                   Kappa : 0.904         
+##  Mcnemar's Test P-Value : 0.0927        
+##                                         
+##             Sensitivity : 0.969         
+##             Specificity : 0.940         
+##          Pos Pred Value : 0.977         
+##          Neg Pred Value : 0.922         
+##              Prevalence : 0.721         
+##          Detection Rate : 0.699         
+##    Detection Prevalence : 0.716         
+##       Balanced Accuracy : 0.955         
+##                                         
+##        'Positive' Class : 0             
+## 
+```
+
+Naive Bayes has a final accuracy of 96.099%.
+
 ## Model Stacking
 We may be able to improve upon any one model by performing model stacking. Here, we build a data frame with the predictions of the already trained models and then fit a model based on those predicted values.
 
@@ -514,7 +587,46 @@ write.table(x=newTest,file="data/SNformat/priorsample2_eval.txt",sep=",",row.nam
 
 
 ```r
-# Nothing here yet.
+nets <- list(c("25","10"),c("25","30"),c("50","10"),c("50","30"),c("100","10"),c("100","30"),c("25-25","110"),c("25-25","330"),c("50-50","110"),c("50-50","330"),c("100-30","110"),c("100-30","330"),c("100-50","110"),c("100-50","330"),c("100-100","110"),c("100-100","330"))
+results <- c()
+for (i in seq(1,length(nets))) {
+        nnpred <- read.table(paste0("NNpreds/priorsample2_CVall_nhid-",nets[[i]][1],"_act",nets[[i]][2],"_blind_pred.txt"))
+        acc <- sum((nnpred[,17]==0 & nnpred[,19]<0.5) | (nnpred[,17]==1 & nnpred[,19]>=0.5))/length(nnpred[,17])
+        for (j in seq(0,9)) {
+                nnpred <- read.table(paste0("NNpreds/priorsample2_CV",as.character(j),"_nhid-",nets[[i]][1],"_act",nets[[i]][2],"_eval_pred.txt"))
+                if (j==0) {
+                        truevals <- nnpred[,17]
+                        predvals <- nnpred[,19]/10
+                } else {
+                        predvals <- predvals + nnpred[,19]/10
+                }
+        }
+        eval <- sum((truevals==0 & predvals<0.5) | (truevals==1 & predvals>=0.5))/length(truevals)
+        results <- rbind(results,cbind(nets[[i]][1],nets[[i]][2],acc,eval))
+}
+colnames(results) <- c("Layers","Activation","Test.Accuracy","Evaluation.Accuracy")
+results <- data.frame(results)
+results
+```
+
+```
+##     Layers Activation     Test.Accuracy Evaluation.Accuracy
+## 1       25         10 0.975170804865856    0.97249312328082
+## 2       25         30 0.977337110481586   0.971242810702676
+## 3       50         10 0.978003666055657   0.972993248312078
+## 4       50         30 0.973671054824196   0.971742935733933
+## 5      100         10 0.977337110481586   0.972243060765191
+## 6      100         30 0.974004332611231    0.97249312328082
+## 7    25-25        110 0.975337443759373   0.975493873468367
+## 8    25-25        330 0.975337443759373   0.972993248312078
+## 9    50-50        110  0.97633727712048   0.975243810952738
+## 10   50-50        330 0.975170804865856   0.972993248312078
+## 11  100-30        110  0.97633727712048   0.975493873468367
+## 12  100-30        330 0.973837693717714   0.972243060765191
+## 13  100-50        110 0.976503916013998   0.975493873468367
+## 14  100-50        330  0.97483752707882   0.971992998249562
+## 15 100-100        110 0.977503749375104   0.975493873468367
+## 16 100-100        330 0.975170804865856   0.972743185796449
 ```
 
 # Analysis of Predictions
@@ -528,8 +640,50 @@ featurePlot(testing[testing$trigger_index!=predRF1,c("log_L","z","E_peak","flux"
 ![plot of chunk found_missed](figure/found_missed.png) 
 
 # Predicting on Independent Samples from Specific Distributions
+In a first test of the predictors, we load in some data from a specific source GRB distribution. Five sets with different seeds and different numbers of active detectors are used.
 
+```r
+files <- c("summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_noevo_ndet27147.txt","summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed11_noevo_ndet26997.txt","summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed12_noevo_ndet29413.txt","summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed50_noevo_ndet24387.txt","summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed60_noevo_ndet26478.txt")
+realdata <- c()
+for (i in seq(1,5)) {
+        temp <- read.table(paste0("data/",files[i]),header=TRUE)
+        temp$trigger_index <- as.factor(temp$trigger_index)
+        temp[,c("radius","phi")]<-t(sapply(temp$grid_id,gridToXY))
+        logCols <- grep("flux|bgd",names(temp))
+        temp[,logCols] <- log10(temp[,logCols])
+        colRemove <- c(1,grep("global|type|background|burst|grid",names(temp)))
+        temp <- temp[,-colRemove]
+        realdata <- rbind(realdata,temp)
+}
+```
 
+We now evaluate our trained predictors on this data set and consider their accuracy.
+
+```r
+realTestRF <- confusionMatrix(predict(modRF$finalModel,realdata),realdata$trigger_index)
+realTestAda <- confusionMatrix(predict(modAda$finalModel,realdata),realdata$trigger_index)
+realTestSVM <- confusionMatrix(predict(modSVM,realdata),realdata$trigger_index)
+realTestLDA <- confusionMatrix(predict(modLDA,realdata),realdata$trigger_index)
+realTestQDA <- confusionMatrix(predict(modQDA,realdata),realdata$trigger_index)
+realTestLogit <- confusionMatrix(predict(modLogit,realdata),realdata$trigger_index)
+realTestNB <- confusionMatrix(predict(modNB,realdata),realdata$trigger_index)
+```
+
+Here we summarize the accuracies:
+
+ - Random forests:  93.5226%
+ 
+ - AdaBoost:  94.7985%
+ 
+ - Support vector machines:  86.8373%
+ 
+ - Linear disc. analysis:  86.9573%
+ 
+ - Quadratic disc. analysis:  86.0514%
+ 
+ - Boosted logistic regression:  91.6048%
+ 
+ - Naive Bayes:  86.8653%
 
 # Conclusions
 

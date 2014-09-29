@@ -75,7 +75,7 @@ def readdata(filepath,Nenc):
     	conv=conv1
     	tidx=17
     ifp.close()
-    filedata=numpy.loadtxt(filepath,converters=conv)
+    filedata=numpy.loadtxt(filepath,converters=conv,skiprows=1)
     x=numpy.zeros((len(filedata),15+Nenc))
     y=numpy.zeros((len(filedata),))
     x[:,0:2]=filedata[:,1:3]
