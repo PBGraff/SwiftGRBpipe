@@ -93,6 +93,12 @@ confMatRF <- confusionMatrix(predRF1, testing$trigger_index)
 confMatRF
 ```
 
+From the random forests predictions, we can look at this distribution of predicted probabilities.
+```{r,rf_pred_distr_train}
+qplot(predRF2[testing$trigger_index==0,2],binwidth=0.01,xlab="Predicted Probability",main="Distribution of Predictions for Non-Detections") + theme_bw()
+qplot(predRF2[testing$trigger_index==1,2],binwidth=0.01,xlab="Predicted Probability",main="Distribution of Predictions for Detections") + theme_bw()
+```
+
 We plot a ROC to see performance varying over threshold value.
 ```{r,rf_roc}
 rocRF <- calculateROC(testing$trigger_index, predRF2[,2], d = 0.001)
@@ -263,6 +269,12 @@ results <- data.frame(results)
 results
 ```
 
+From the SkyNet predictions, we can look at the distribution of predicted probabilities.
+```{r,skynet_pred_distr_train}
+qplot(predvals[truevals==0],binwidth=0.01,xlab="Predicted Probability",main="Distribution of Predictions for Non-Detections") + theme_bw()
+qplot(predvals[truevals==1],binwidth=0.01,xlab="Predicted Probability",main="Distribution of Predictions for Detections") + theme_bw()
+```
+
 # Analysis of Predictions
 We now take the random forests model, as it - along with AdaBoost - performed the best on the test data, and analyze the distributions of those that were predicted incorrectly.
 
@@ -271,7 +283,7 @@ featurePlot(testing[testing$trigger_index!=predRF1,c("log_L","z","E_peak","flux"
 ```
 
 # Predicting on Independent Samples from Specific Distributions
-In a first test of the predictors, we load in some data from a specific source GRB distribution. Five sets with different seeds and different numbers of active detectors are used.
+In a first test of the predictors, we load in some data from a specific source GRB distribution. Five sets with different seeds and different numbers of active detectors are used. The combined data is also written for SkyNet use.
 ```{r,gen_test_data}
 files <- c("summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_noevo_ndet27147.txt","summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed11_noevo_ndet26997.txt","summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed12_noevo_ndet29413.txt","summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed50_noevo_ndet24387.txt","summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_seed60_noevo_ndet26478.txt")
 realdata <- c()
@@ -285,6 +297,8 @@ for (i in seq(1,5)) {
         temp <- temp[,-colRemove]
         realdata <- rbind(realdata,temp)
 }
+SNrealdata <- cbind(realdata[,-14],trigger_index=as.integer(realdata$trigger_index)-1)
+write.table(x=SNrealdata,file="data/SNformat/summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_noevo_all.txt",sep=",",row.names=FALSE,col.names=FALSE)
 ```
 
 We now evaluate our trained predictors on this data set and consider their accuracy.
@@ -313,6 +327,42 @@ Here we summarize the accuracies:
  - Boosted logistic regression:  `r realTestLogit$overall[1]*100`%
  
  - Naive Bayes:  `r realTestNB$overall[1]*100`%
+
+And lastly we load in the SkyNet predictions and evaluate them.
+```{r,eval_test_skynet}
+realResults <- c()
+for (i in seq(1,length(nets))) {
+        for (j in seq(0,9)) {
+                nnpred <- read.table(paste0("NNpreds/priorsample2_CV",as.character(j),"_nhid-",nets[[i]][1],"_act",nets[[i]][2],"_realdata_pred.txt"))
+                if (j==0) {
+                        truevals <- nnpred[,17]
+                        predvals <- nnpred[,19]/10
+                } else {
+                        predvals <- predvals + nnpred[,19]/10
+                }
+        }
+        eval <- sum((truevals==0 & predvals<0.5) | (truevals==1 & predvals>=0.5))/length(truevals)
+        realResults <- rbind(realResults,cbind(nets[[i]][1],nets[[i]][2],eval))
+}
+colnames(realResults) <- c("Layers","Activation","Accuracy")
+realResults <- data.frame(realResults)
+realResults
+```
+
+From the random forests predictions, we can look at this distribution of predicted probabilities.
+```{r,rf_pred_distr}
+realPredRF <- predict(modRF$finalModel,realdata,type="prob")
+qplot(realPredRF[realdata$trigger_index==0,2],binwidth=0.01,xlab="Predicted Probability",main="Distribution of Predictions for Non-Detections") + theme_bw()
+qplot(realPredRF[realdata$trigger_index==1,2],binwidth=0.01,xlab="Predicted Probability",main="Distribution of Predictions for Detections") + theme_bw()
+```
+
+Based on this, we make a ROC to see if there is a better threshold than the default of 0.5.
+```{r,rf_real_roc}
+rocRealRF <- calculateROC(realdata$trigger_index, realPredRF[,2], d = 0.001)
+plotROC(rocRealRF, title = "Random Forests ROC on Real Data")
+```
+
+The optimal threshold is at a probability of `r rocRealRF$pthresh[which.max(rocRealRF$F1score)]` and achieves an accuracy of `r rocRealRF$Accuracy[which.max(rocRealRF$F1score)]*100`%.
 
 # Conclusions
 

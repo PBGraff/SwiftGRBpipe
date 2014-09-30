@@ -25,8 +25,10 @@ def rewriteFile(filename):
 	fp.writelines(store)
 	fp.close()
 
-for i in CV:
-	for t in types:
-		rewriteFile(root+'CV'+repr(i)+t)
+#for i in CV:
+#	for t in types:
+#		rewriteFile(root+'CV'+repr(i)+t)
 
 #rewriteFile(root+'eval.txt')
+
+rewriteFile("summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_noevo_all.txt")
