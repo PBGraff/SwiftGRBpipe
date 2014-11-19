@@ -31,4 +31,4 @@ def rewriteFile(filename):
 
 #rewriteFile(root+'eval.txt')
 
-rewriteFile("summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_noevo_all.txt")
+rewriteFile("summary_list_Swiftlc_z360_lum5205_n0084_n1207_n2070_alpha065_beta300_Yonetoku_mod18_noevo_all.txtd")

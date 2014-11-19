@@ -526,15 +526,19 @@ We may be able to improve upon any one model by performing model stacking. Here,
 ```r
 stackTrain <- data.frame(rf = predict(modRF$finalModel,training,type="prob")[,2],
                          ada = predict(modRF$finalModel,training,type="prob")[,2],
+                         svm = as.numeric(predict(modSVM,training)),
                          lda = as.numeric(predict(modLDA,training)),
                          qda = as.numeric(predict(modQDA,training)),
                          logit = as.numeric(predict(modLogit,training)),
+                         nb = as.numeric(predict(modNB,training)),
                          trigger_index = training$trigger_index)
 stackTest <- data.frame(rf = predict(modRF$finalModel,testing,type="prob")[,2],
                         ada = predict(modRF$finalModel,testing,type="prob")[,2],
+                        svm = as.numeric(predict(modSVM,testing)),
                         lda = as.numeric(predict(modLDA,testing)),
                         qda = as.numeric(predict(modQDA,testing)),
                         logit = as.numeric(predict(modLogit,testing)),
+                        nb = as.numeric(predict(modNB,testing)),
                         trigger_index = testing$trigger_index)
 ```
 
@@ -599,6 +603,7 @@ for (i in seq(0,9)) {
 write.table(x=newTest,file="data/SNformat/priorsample2_eval.txt",sep=",",row.names=FALSE,col.names=FALSE)
 ```
 
+The predictions are then read in - averaging over all cross-validation networks - and the accuracy is computed.
 
 ```r
 nets <- list(c("25","10"),c("25","30"),c("50","10"),c("50","30"),c("100","10"),c("100","30"),c("25-25","110"),c("25-25","330"),c("50-50","110"),c("50-50","330"),c("100-30","110"),c("100-30","330"),c("100-50","110"),c("100-50","330"),c("100-100","110"),c("100-100","330"))
@@ -643,9 +648,20 @@ results
 ## 16 100-100        330 0.975170804865856   0.972743185796449
 ```
 
-From the SkyNet predictions, we can look at the distribution of predicted probabilities.
+From the SkyNet predictions, we can look at the distribution of predicted probabilities from the network that performed best on the test data - a single hidden layer with 50 nodes and sigmoid activation function.
 
 ```r
+nnpred <- read.table(paste0("NNpreds/priorsample2_CVall_nhid-",nets[[3]][1],"_act",nets[[3]][2],"_blind_pred.txt"))
+acc <- sum((nnpred[,17]==0 & nnpred[,19]<0.5) | (nnpred[,17]==1 & nnpred[,19]>=0.5))/length(nnpred[,17])
+for (j in seq(0,9)) {
+        nnpred <- read.table(paste0("NNpreds/priorsample2_CV",as.character(j),"_nhid-",nets[[3]][1],"_act",nets[[3]][2],"_eval_pred.txt"))
+        if (j==0) {
+                truevals <- nnpred[,17]
+                predvals <- nnpred[,19]/10
+        } else {
+                predvals <- predvals + nnpred[,19]/10
+        }
+}
 qplot(predvals[truevals==0],binwidth=0.01,xlab="Predicted Probability",main="Distribution of Predictions for Non-Detections") + theme_bw()
 ```
 
@@ -656,6 +672,17 @@ qplot(predvals[truevals==1],binwidth=0.01,xlab="Predicted Probability",main="Dis
 ```
 
 ![plot of chunk skynet_pred_distr_train](figure/skynet_pred_distr_train2.png) 
+
+We plot a ROC to see performance varying over threshold value.
+
+```r
+rocSkyNet <- calculateROC(truevals, predvals, d = 0.001)
+plotROC(rocSkyNet, title = "SkyNet ROC")
+```
+
+![plot of chunk skynet_roc](figure/skynet_roc.png) 
+
+The optimal threshold is at a probability of 0.257 and achieves an accuracy of 97.4494%.
 
 # Analysis of Predictions
 We now take the random forests model, as it - along with AdaBoost - performed the best on the test data, and analyze the distributions of those that were predicted incorrectly.
@@ -783,6 +810,158 @@ plotROC(rocRealRF, title = "Random Forests ROC on Real Data")
 
 The optimal threshold is at a probability of 0.189 and achieves an accuracy of 94.1506%.
 
-# Conclusions
+# Non-Random Training Data
+We now perform a splitting of the data into training and test evaluation sets that is not random. In this case, we use the first 60 of 100 global parameter settings for training and the remaining 40 for testing.
+
+```r
+first60 <- as.integer(as.factor(data$lum_star_global))<=60
+colRemove <- c(1,grep("global|type|background|burst|grid",names(data)))
+training2 <- data[first60,-colRemove]
+testing2 <- data[-first60,-colRemove]
+```
+
+This new data set will be used to train/test using our best models from before - random forests and AdaBoost. We can thus see if leaving a source GRB distribution from the training data entirely will create particular bias in later prediction.
+
+## Random Forests
+We perform the same kind of random forests training as before.
+
+```r
+modRFsort <- train(trigger_index ~ ., data = training2, method = "rf", tuneGrid = expand.grid(mtry = seq(3,13,by=2)), trControl = trainControl(method = "cv", number = 10))
+```
+
+This is now evaluated on the test data set.
+
+```r
+predRFsort1 <- predict(modRFsort$finalModel, testing2, type="response")
+predRFsort2 <- predict(modRFsort$finalModel, testing2, type="prob")
+confMatRFsort <- confusionMatrix(predRFsort1, testing2$trigger_index)
+confMatRFsort
+```
+
+```
+## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    0    1
+##          0 6969   20
+##          1  243 2767
+##                                        
+##                Accuracy : 0.974        
+##                  95% CI : (0.97, 0.977)
+##     No Information Rate : 0.721        
+##     P-Value [Acc > NIR] : <2e-16       
+##                                        
+##                   Kappa : 0.936        
+##  Mcnemar's Test P-Value : <2e-16       
+##                                        
+##             Sensitivity : 0.966        
+##             Specificity : 0.993        
+##          Pos Pred Value : 0.997        
+##          Neg Pred Value : 0.919        
+##              Prevalence : 0.721        
+##          Detection Rate : 0.697        
+##    Detection Prevalence : 0.699        
+##       Balanced Accuracy : 0.980        
+##                                        
+##        'Positive' Class : 0            
+## 
+```
+
+From the random forests predictions, we can look at this distribution of predicted probabilities.
+
+```r
+qplot(predRFsort2[testing2$trigger_index==0,2],binwidth=0.01,xlab="Predicted Probability",main="Distribution of Predictions for Non-Detections") + theme_bw()
+```
+
+![plot of chunk rf_pred_distr_sorted](figure/rf_pred_distr_sorted1.png) 
+
+```r
+qplot(predRFsort2[testing2$trigger_index==1,2],binwidth=0.01,xlab="Predicted Probability",main="Distribution of Predictions for Detections") + theme_bw()
+```
+
+![plot of chunk rf_pred_distr_sorted](figure/rf_pred_distr_sorted2.png) 
+
+We plot a ROC to see performance varying over threshold value.
+
+```r
+rocRFsort <- calculateROC(testing2$trigger_index, predRFsort2[,2], d = 0.001)
+plotROC(rocRFsort, title = "Random Forests ROC")
+```
+
+![plot of chunk rf_roc_sorted](figure/rf_roc_sorted.png) 
+
+The optimal threshold is at a probability of 0.857 and achieves an accuracy of 98.2698%.
+
+## AdaBoost
+We perform the same kind of AdaBoost training as before.
+
+```r
+modAdasort <- train(trigger_index ~ ., data = training2, method = "ada", tuneGrid = expand.grid(nu=0.1, iter=seq(50,150,by=50), maxdepth=seq(2,4)), trControl = trainControl(method = "cv"))
+```
+
+This is now evaluated on the test data set.
+
+```r
+predAdasort1 <- predict(modAdasort$finalModel, testing2, type="vector")
+predAdasort2 <- predict(modAdasort$finalModel, testing2, type="prob")
+confMatAdasort <- confusionMatrix(predAdasort1, testing2$trigger_index)
+confMatAdasort
+```
+
+```
+## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    0    1
+##          0 6996   28
+##          1  216 2759
+##                                         
+##                Accuracy : 0.976         
+##                  95% CI : (0.972, 0.979)
+##     No Information Rate : 0.721         
+##     P-Value [Acc > NIR] : <2e-16        
+##                                         
+##                   Kappa : 0.941         
+##  Mcnemar's Test P-Value : <2e-16        
+##                                         
+##             Sensitivity : 0.970         
+##             Specificity : 0.990         
+##          Pos Pred Value : 0.996         
+##          Neg Pred Value : 0.927         
+##              Prevalence : 0.721         
+##          Detection Rate : 0.700         
+##    Detection Prevalence : 0.702         
+##       Balanced Accuracy : 0.980         
+##                                         
+##        'Positive' Class : 0             
+## 
+```
+
+From the random forests predictions, we can look at this distribution of predicted probabilities.
+
+```r
+qplot(predAdasort2[testing2$trigger_index==0,2],binwidth=0.01,xlab="Predicted Probability",main="Distribution of Predictions for Non-Detections") + theme_bw()
+```
+
+![plot of chunk ada_pred_distr_sorted](figure/ada_pred_distr_sorted1.png) 
+
+```r
+qplot(predAdasort2[testing2$trigger_index==1,2],binwidth=0.01,xlab="Predicted Probability",main="Distribution of Predictions for Detections") + theme_bw()
+```
+
+![plot of chunk ada_pred_distr_sorted](figure/ada_pred_distr_sorted2.png) 
+
+We plot a ROC to see performance varying over threshold value.
+
+```r
+rocAdasort <- calculateROC(testing2$trigger_index, predAdasort2[,2], d = 0.001)
+plotROC(rocAdasort, title = "AdaBoost ROC")
+```
+
+![plot of chunk ada_roc_sorted](figure/ada_roc_sorted.png) 
+
+The optimal threshold is at a probability of 0.55 and achieves an accuracy of 97.5998%.
+
+# Adding Points from Real Data Distribution to Training Data Set
 
 
